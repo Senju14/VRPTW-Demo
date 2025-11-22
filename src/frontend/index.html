@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRPTW Visualization</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+            <h2>VRPTW Controls</h2>
+            <div class="control-group">
+                <label for="instance-select">Solomon Instance:</label>
+                <select id="instance-select">
+                    <option value="">Select instance...</option>
+                    <option value="c101">C101</option>
+                    <option value="c102">C102</option>
+                    <option value="r101">R101</option>
+                    <option value="r102">R102</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="num-vehicles">Number of Vehicles:</label>
+                <input type="number" id="num-vehicles" min="1" max="50" value="5">
+            </div>
+            <div class="control-group">
+                <label for="time-window-multiplier">Time Window Multiplier:</label>
+                <input type="number" id="time-window-multiplier" min="0.5" max="2" step="0.1" value="1.0">
+                <small>Adjust time window constraints</small>
+            </div>
+            <div class="control-group">
+                <button id="load-instance-btn" class="btn btn-primary">Load Instance</button>
+                <button id="run-inference-btn" class="btn btn-success" disabled>Run Inference</button>
+                <button id="clear-btn" class="btn btn-secondary">Clear Map</button>
+            </div>
+            <!-- Instance Info Panel -->
+            <div class="info-panel" id="instance-info">
+                <h3>Instance Info</h3>
+                <div class="info-item">
+                    <span class="info-label">Instance:</span>
+                    <span id="instance-name" class="info-value">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Total Customers:</span>
+                    <span id="total-customers" class="info-value">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Vehicle Capacity:</span>
+                    <span id="vehicle-capacity" class="info-value">-</span>
+                </div>
+            </div>
+            <!-- Metrics Panel -->
+            <div class="metrics-panel">
+                <h3>Solution Metrics</h3>
+                <div class="metric-item">
+                    <span class="metric-label">Total Distance:</span>
+                    <span id="total-distance" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Total Time:</span>
+                    <span id="total-time" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Avg Distance/Vehicle:</span>
+                    <span id="avg-distance" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Vehicles Used:</span>
+                    <span id="vehicles-used" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Customers Served:</span>
+                    <span id="customers-served" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Coverage:</span>
+                    <span id="coverage" class="metric-value">-</span>
+                </div>
+            </div>
+            <!-- Status -->
+            <div id="status" class="status"></div>
+        </div>
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- App Scripts -->
+    <script src="/static/solomon-parser.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,6 +1,4 @@
-"""
-Data loader for VRPTW instances.
-"""
+
 
 import os
 from typing import List, Tuple, Dict, Any
@@ -18,18 +16,7 @@ class Customer:
 
 
 def load_instance(instance_path: str) -> Tuple[Customer, List[Customer], int, int]:
-    """
-    Load a VRPTW instance from file.
 
-    Args:
-        instance_path: Path to the instance file (with or without extension).
-
-    Returns:
-        depot: Customer object for depot.
-        customers: List of Customer objects.
-        vehicle_capacity: Capacity of vehicles.
-        num_vehicles: Number of vehicles.
-    """
     # Handle path with extension already included
     file_path = instance_path
     if not os.path.exists(file_path):
@@ -103,9 +90,7 @@ def load_instance(instance_path: str) -> Tuple[Customer, List[Customer], int, in
 
 
 def get_available_instances() -> List[Dict[str, str]]:
-    """
-    Get list of available instances from manifest.
-    """
+
     import json
     manifest_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'file_manifest.json')
     with open(manifest_path, 'r') as f:

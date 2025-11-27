@@ -8,6 +8,14 @@ import os
 from src.utils.data_loader import load_instance, get_available_instances
 from src.utils.solver import solve_vrptw
 from src.utils.visualization import create_map, get_map_html
+from src.utils.dqn_alns_solver import run_dqn_alns
+
+# DQN dependencies
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from safetensors.torch import load_file
+import numpy as np
 
 app = Flask(__name__, template_folder='../frontend', static_folder='../frontend/static')
 CORS(app)  # Enable CORS for frontend
@@ -107,11 +115,18 @@ def solve_demo():
     instance_name = data.get('instance_name', '')
     num_vehicles = data.get('num_vehicles', 5)
     
-    print(f"Solving: {instance_path}, name: {instance_name}")  # Debug log
+    print(f"\n{'='*60}")
+    print(f"[SOLVE_DEMO] Request received")
+    print(f"[SOLVE_DEMO] Instance: {instance_name}")
+    print(f"[SOLVE_DEMO] Path: {instance_path}")
+    print(f"[SOLVE_DEMO] Vehicles: {num_vehicles}")
+    print(f"{'='*60}\n")
     
     try:
         # Load instance
+        print(f"[SOLVE_DEMO] Loading instance data...")
         depot, customers, capacity, _ = load_instance(instance_path)
+        print(f"[SOLVE_DEMO] Loaded: {len(customers)} customers, capacity: {capacity}")
         
         # Determine correct model path based on instance
         model_path = None
@@ -129,9 +144,18 @@ def solve_demo():
         
         # Check if model exists
         model_exists = model_path and os.path.exists(model_path)
+        print(f"[SOLVE_DEMO] Model path: {model_path}")
+        print(f"[SOLVE_DEMO] Model exists: {model_exists}")
         
         # Solve using OR-Tools (fallback if no model)
-        results = solve_vrptw(depot, customers, capacity, num_vehicles)
+        if model_exists:
+            print(f"[SOLVE_DEMO] Using DQN-ALNS solver")
+            results = solve_with_dqn(depot, customers, capacity, num_vehicles, model_path)
+        else:
+            print(f"[SOLVE_DEMO] Using OR-Tools solver")
+            results = solve_vrptw(depot, customers, capacity, num_vehicles)
+        
+        print(f"[SOLVE_DEMO] Solver completed successfully")
         
         # Add model information to results
         results['model_used'] = model_path if model_exists else 'OR-Tools (No DQN model available)'
@@ -180,5 +204,30 @@ def get_map():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
+def solve_with_dqn(depot, customers, capacity, num_vehicles, model_path):
+    try:
+        print(f"[DQN-ALNS] Using trained model: {model_path}")
+        print(f"[DQN-ALNS] Solving with {len(customers)} customers...")
+        
+        # Run DQN-ALNS solver
+        results = run_dqn_alns(
+            depot=depot,
+            customers=customers,
+            capacity=capacity,
+            num_vehicles=num_vehicles,
+            model_path=model_path,
+            iterations=300  # Reduce for faster web response
+        )
+        
+        print(f"[DQN-ALNS] Completed successfully!")
+        return results
+        
+    except Exception as e:
+        print(f"[DQN-ALNS] Error: {str(e)}")
+        print(f"[DQN-ALNS] Falling back to OR-Tools solver...")
+        import traceback
+        traceback.print_exc()
+        return solve_vrptw(depot, customers, capacity, num_vehicles)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)

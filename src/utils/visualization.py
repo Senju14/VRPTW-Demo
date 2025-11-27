@@ -1,6 +1,4 @@
-"""
-Visualization for VRPTW.
-"""
+
 
 import folium
 from folium import plugins
@@ -9,17 +7,7 @@ from src.utils.data_loader import Customer
 
 
 def create_map(depot: Customer, customers: List[Customer], routes: List[List[int]] = None) -> folium.Map:
-    """
-    Create a Folium map with depot, customers, and routes.
-
-    Args:
-        depot: Depot customer.
-        customers: List of customers.
-        routes: List of routes (each route is list of customer indices).
-
-    Returns:
-        Folium map object.
-    """
+ 
     # Center map on depot
     m = folium.Map(location=[depot.y, depot.x], zoom_start=12)
 
@@ -53,7 +41,5 @@ def create_map(depot: Customer, customers: List[Customer], routes: List[List[int
 
 
 def get_map_html(map_obj: folium.Map) -> str:
-    """
-    Get HTML representation of the map.
-    """
+   
     return map_obj._repr_html_()

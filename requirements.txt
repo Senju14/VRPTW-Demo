@@ -6,3 +6,4 @@ pandas>=2.0.0
 torch>=2.0.0
 safetensors>=0.4.0
 numpy>=1.24.0
+packaging>=21.0

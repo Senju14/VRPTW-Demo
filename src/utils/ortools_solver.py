@@ -1,16 +1,25 @@
 
 
+"""
+OR-Tools VRPTW Solver (Baseline)
+===============================
+
+Google OR-Tools constraint programming solver for VRPTW.
+- Uses built-in optimization algorithms
+- Handles capacity, time window, and vehicle constraints
+- Production-ready baseline for comparison with DQN model
+
+Main function: solve_vrptw()
+"""
+
 from typing import List, Tuple, Dict, Any
 import time
 from src.utils.data_loader import Customer
 
 
 def solve_vrptw(depot: Customer, customers: List[Customer], vehicle_capacity: int, num_vehicles: int) -> Dict[str, Any]:
-    """
-    Solve VRPTW using OR-Tools.
-    """
-    print(f"[OR-Tools] Starting solver...")
-    print(f"[OR-Tools] Customers: {len(customers)}, Vehicles: {num_vehicles}, Capacity: {vehicle_capacity}")
+    """Solve VRPTW using Google OR-Tools (baseline solver)"""
+    print(f"[OR-TOOLS] Starting with {len(customers)} customers, {num_vehicles} vehicles")
     
     try:
         from ortools.constraint_solver import routing_enums_pb2

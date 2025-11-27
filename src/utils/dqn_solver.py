@@ -1,5 +1,17 @@
 
 
+"""
+DQN-ALNS Solver for VRPTW
+=========================
+
+Uses Deep Q-Network trained model to select destroy operators in ALNS metaheuristic.
+- DQN Model: Chooses between random_removal and route_removal strategies
+- ALNS: Adaptive Large Neighborhood Search with greedy repair
+- Constraints: Vehicle capacity, time windows, vehicle count limit
+
+Main function: solve_dqn_vrptw()
+"""
+
 import math
 import random
 import copy
@@ -9,7 +21,7 @@ import torch.nn.functional as F
 from safetensors.torch import load_file
 
 
-# ==================== HELPER CLASSES ====================
+# ==================== SOLUTION REPRESENTATION ====================
 
 class Solution:
     def __init__(self, routes):
@@ -88,14 +100,14 @@ def evaluate_solution(solution, depot, vehicle_capacity):
 
 # ==================== INITIAL SOLUTION ====================
 
-def create_initial_solution(depot, customers, vehicle_capacity):
+def create_initial_solution(depot, customers, vehicle_capacity, max_vehicles=None):
    
     routes = []
     customers_copy = list(customers)
     random.shuffle(customers_copy)
     unserved_customers = set(customers_copy)
 
-    while unserved_customers:
+    while unserved_customers and (max_vehicles is None or len(routes) < max_vehicles):
         new_route = []
         current_load = 0
         current_time = 0.0
@@ -188,7 +200,7 @@ def route_removal(solution, depot, capacity, num_routes_to_remove):
 
 # ==================== REPAIR OPERATOR ====================
 
-def greedy_insertion(solution, customers_to_insert, depot, capacity):
+def greedy_insertion(solution, customers_to_insert, depot, capacity, max_vehicles=None):
   
     random.shuffle(customers_to_insert)
 
@@ -215,10 +227,32 @@ def greedy_insertion(solution, customers_to_insert, depot, capacity):
         if best_route_idx != -1:
             solution.routes[best_route_idx].insert(best_position_idx, cust)
         else:
-            new_route = [cust]
-            cost, time_v, cap_v = evaluate_route(new_route, depot, capacity)
-            if time_v == 0 and cap_v == 0:
-                solution.routes.append(new_route)
+            # Only create new route if under vehicle limit
+            if max_vehicles is None or len(solution.routes) < max_vehicles:
+                new_route = [cust]
+                cost, time_v, cap_v = evaluate_route(new_route, depot, capacity)
+                if time_v == 0 and cap_v == 0:
+                    solution.routes.append(new_route)
+            # If at vehicle limit, force insert into best existing route
+            elif solution.routes:
+                # Find route with minimum cost increase (even with violations)
+                best_cost_increase = float('inf')
+                fallback_route_idx = 0
+                fallback_position_idx = 0
+                
+                for r_idx, route in enumerate(solution.routes):
+                    old_cost, _, _ = evaluate_route(route, depot, capacity)
+                    for p_idx in range(len(route) + 1):
+                        new_route = route[:p_idx] + [cust] + route[p_idx:]
+                        new_cost, _, _ = evaluate_route(new_route, depot, capacity)
+                        cost_increase = new_cost - old_cost
+                        
+                        if cost_increase < best_cost_increase:
+                            best_cost_increase = cost_increase
+                            fallback_route_idx = r_idx
+                            fallback_position_idx = p_idx
+                
+                solution.routes[fallback_route_idx].insert(fallback_position_idx, cust)
 
     evaluate_solution(solution, depot, capacity)
 
@@ -252,12 +286,13 @@ class DQNAgent:
         self.model.eval()
         
     def select_action(self, state, epsilon=0.0):
-       
+        """Select action using trained DQN model"""
         if random.random() > epsilon:
             with torch.no_grad():
                 state_tensor = torch.FloatTensor([state]).to(self.device)
                 q_values = self.model(state_tensor)
-                return q_values.max(1)[1].item()
+                action = q_values.max(1)[1].item()
+                return action
         else:
             return random.randint(0, 1)
 
@@ -271,81 +306,86 @@ def get_state(current_cost, best_cost, iterations_since_best):
     return [cost_diff, stuck_norm]
 
 
-def run_dqn_alns(depot, customers, capacity, num_vehicles, model_path, iterations=500):
+def solve_dqn_vrptw(depot, customers, capacity, num_vehicles, model_path, iterations=300):
    
     import time
     start_time = time.time()
     
-    print(f"Starting DQN-ALNS solver with {len(customers)} customers...")
+    print(f"[DQN SOLVER] Starting with {len(customers)} customers, {num_vehicles} vehicles")
     
-    # Initialize
-    destroy_operators = [random_removal, route_removal]
-    STATE_SIZE = 2
-    ACTION_SIZE = len(destroy_operators)
-    
-    # Load DQN agent
-    agent = DQNAgent(STATE_SIZE, ACTION_SIZE)
+    # Setup DQN agent with trained model
+    destroy_operators = [random_removal, route_removal]  # 2 actions: random vs route removal
+    agent = DQNAgent(state_size=2, action_size=2)
     agent.load_weights(model_path)
-    print(f"Loaded DQN model: {model_path}")
+    print(f"[DQN SOLVER] Loaded model: {model_path.split('/')[-1]}")
     
-    # Create initial solution
-    initial_solution = create_initial_solution(depot, customers, capacity)
+    # Generate initial solution
+    initial_solution = create_initial_solution(depot, customers, capacity, num_vehicles)
     current_solution = copy.deepcopy(initial_solution)
     best_solution = copy.deepcopy(initial_solution)
-    
     iterations_since_best = 0
     
-    print(f"Initial solution cost: {best_solution.total_cost:.2f}, routes: {len(best_solution.routes)}")
+    print(f"[DQN SOLVER] Initial: cost={best_solution.total_cost:.1f}, vehicles={len(best_solution.routes)}/{num_vehicles}")
     
     # ALNS loop
     for iteration in range(1, iterations + 1):
-        # Get state and select action using DQN
+        # DQN decides destroy strategy
         state = get_state(current_solution.total_cost, best_solution.total_cost, iterations_since_best)
-        action_idx = agent.select_action(state, epsilon=0.0)  # Greedy for inference
-        
-        # Apply destroy operator
+        action_idx = agent.select_action(state, epsilon=0.0)
         destroy_op = destroy_operators[action_idx]
+        
+        # Debug log for first few iterations
+        if iteration <= 5 or iteration % 100 == 0:
+            action_name = "random_removal" if action_idx == 0 else "route_removal"
+            print(f"  Iter {iteration}: DQN chose {action_name} (state={state})")
+        
         new_solution = copy.deepcopy(current_solution)
         
         if destroy_op == random_removal:
             num_to_remove = random.randint(5, 15)
             removed = destroy_op(new_solution, depot, capacity, num_to_remove)
         else:
-            num_routes = random.randint(1, max(1, len(new_solution.routes) // 3))
+            # Limit route removal to not exceed vehicle constraint
+            max_routes_to_remove = min(len(new_solution.routes), max(1, len(new_solution.routes) // 3))
+            num_routes = random.randint(1, max_routes_to_remove)
             removed = destroy_op(new_solution, depot, capacity, num_routes)
         
-        # Repair
-        greedy_insertion(new_solution, removed, depot, capacity)
+        # Repair with vehicle constraint
+        greedy_insertion(new_solution, removed, depot, capacity, num_vehicles)
         
         # Evaluate new solution
         evaluate_solution(new_solution, depot, capacity)
         
-        # Update best solution
-        if new_solution.total_cost < best_solution.total_cost:
-            best_solution = copy.deepcopy(new_solution)
-            current_solution = copy.deepcopy(new_solution)
-            iterations_since_best = 0
+        # Only accept solutions that don't exceed vehicle limit
+        if len(new_solution.routes) <= num_vehicles:
+            # Update best solution
+            if new_solution.total_cost < best_solution.total_cost:
+                best_solution = copy.deepcopy(new_solution)
+                current_solution = copy.deepcopy(new_solution)
+                iterations_since_best = 0
+            else:
+                iterations_since_best += 1
+                # Simple acceptance criterion
+                if random.random() < 0.1:
+                    current_solution = copy.deepcopy(new_solution)
         else:
             iterations_since_best += 1
-            # Simple acceptance criterion
-            if random.random() < 0.1:
-                current_solution = copy.deepcopy(new_solution)
         
         if iteration % 100 == 0:
-            print(f"Iteration {iteration}/{iterations}: Best cost = {best_solution.total_cost:.2f}, routes = {len(best_solution.routes)}")
+            print(f"  Progress: {iteration}/{iterations}, best_cost={best_solution.total_cost:.1f}")
     
     execution_time = time.time() - start_time
     
-    # Convert routes to node indices for return
+    # Convert to output format
     routes_as_indices = []
     for route in best_solution.routes:
-        route_indices = [0]  # Start from depot
-        for cust in route:
-            route_indices.append(cust.id)
+        route_indices = [0]  # depot first
+        for customer in route:
+            route_indices.append(customer.id)
         routes_as_indices.append(route_indices)
     
-    print(f"DQN-ALNS completed in {execution_time:.2f}s")
-    print(f"Final: cost = {best_solution.total_cost:.2f}, routes = {len(best_solution.routes)}")
+    print(f"[DQN SOLVER] Completed in {execution_time:.1f}s")
+    print(f"[DQN SOLVER] Final: cost={best_solution.total_cost:.1f}, vehicles={len(best_solution.routes)}/{num_vehicles}")
     
     return {
         'routes': routes_as_indices,

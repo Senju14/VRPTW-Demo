@@ -6,9 +6,9 @@ from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
 import os
 from src.utils.data_loader import load_instance, get_available_instances
-from src.utils.solver import solve_vrptw
+from src.utils.ortools_solver import solve_vrptw
 from src.utils.visualization import create_map, get_map_html
-from src.utils.dqn_alns_solver import run_dqn_alns
+from src.utils.dqn_solver import solve_dqn_vrptw
 
 # DQN dependencies
 import torch
@@ -147,18 +147,18 @@ def solve_demo():
         print(f"[SOLVE_DEMO] Model path: {model_path}")
         print(f"[SOLVE_DEMO] Model exists: {model_exists}")
         
-        # Solve using OR-Tools (fallback if no model)
+        # Choose solver based on model availability
         if model_exists:
-            print(f"[SOLVE_DEMO] Using DQN-ALNS solver")
-            results = solve_with_dqn(depot, customers, capacity, num_vehicles, model_path)
+            print(f"[SOLVE_DEMO] Using DQN Learned Model")
+            results = solve_dqn_vrptw(depot, customers, capacity, num_vehicles, model_path)
         else:
-            print(f"[SOLVE_DEMO] Using OR-Tools solver")
+            print(f"[SOLVE_DEMO] Using OR-Tools Baseline")
             results = solve_vrptw(depot, customers, capacity, num_vehicles)
         
         print(f"[SOLVE_DEMO] Solver completed successfully")
         
-        # Add model information to results
-        results['model_used'] = model_path if model_exists else 'OR-Tools (No DQN model available)'
+        # Add solver info to results
+        results['solver_used'] = f'DQN Model: {model_path}' if model_exists else 'OR-Tools Baseline'
         results['using_learned_model'] = model_exists
         
         # Calculate additional metrics
@@ -204,30 +204,7 @@ def get_map():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
-def solve_with_dqn(depot, customers, capacity, num_vehicles, model_path):
-    try:
-        print(f"[DQN-ALNS] Using trained model: {model_path}")
-        print(f"[DQN-ALNS] Solving with {len(customers)} customers...")
-        
-        # Run DQN-ALNS solver
-        results = run_dqn_alns(
-            depot=depot,
-            customers=customers,
-            capacity=capacity,
-            num_vehicles=num_vehicles,
-            model_path=model_path,
-            iterations=300  # Reduce for faster web response
-        )
-        
-        print(f"[DQN-ALNS] Completed successfully!")
-        return results
-        
-    except Exception as e:
-        print(f"[DQN-ALNS] Error: {str(e)}")
-        print(f"[DQN-ALNS] Falling back to OR-Tools solver...")
-        import traceback
-        traceback.print_exc()
-        return solve_vrptw(depot, customers, capacity, num_vehicles)
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

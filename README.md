@@ -32,6 +32,7 @@ VRPTW_Demo/
 │   └── utils/                   # Utility modules
 │       ├── data_loader.py      # Multi-format instance loader
 │       ├── solver.py           # OR-Tools VRPTW solver with constraints
+│       ├── dqn_alns_solver.py  # DQN-ALNS solver with neural network
 │       └── visualization.py    # Folium map generation (legacy)
 ├── data/                        # Benchmark datasets
 │   ├── Solomon/                 # Solomon benchmark instances (25-100 customers)
@@ -104,6 +105,8 @@ VRPTW_Demo/
 | **Flask** | ≥3.0.0 | Web framework & API server |
 | **Flask-CORS** | ≥4.0.0 | Cross-origin resource sharing |
 | **OR-Tools** | ≥9.7.0 | Optimization solver engine |
+| **PyTorch** | ≥2.0.0 | Deep learning framework for DQN |
+| **SafeTensors** | ≥0.4.0 | Efficient model weight storage |
 | **Folium** | ≥0.14.0 | Map visualization (legacy support) |
 | **Pandas** | ≥2.0.0 | Data manipulation |
 
@@ -153,9 +156,27 @@ python main.py
 
 ## 🧠 Learn-to-Solve Architecture
 
-The system implements an **instance-specific learning approach** where:
+The system implements a **DQN-ALNS (Deep Q-Network with Adaptive Large Neighborhood Search)** hybrid approach:
+
+### DQN-ALNS Components
+
+1. **Neural Network Architecture** (`src/utils/dqn_alns_solver.py`):
+   - 3-layer neural network (64-64 hidden units)
+   - State representation: [cost_difference, stuck_iterations_normalized]
+   - Action space: Destroy operators (random_removal, route_removal)
+   
+2. **ALNS Framework**:
+   - **Destroy operators**: Random removal, route-based removal
+   - **Repair operators**: Greedy insertion with time window constraints
+   - **Iterations**: 300 iterations for web response optimization
+   
+3. **Solution Evaluation**:
+   - Time window constraint checking (ready_time, due_date)
+   - Capacity constraint validation
+   - Route cost calculation with distance metrics
 
 ### Model Selection Logic
+
 ```python
 # Solomon instances: c101 → dqn_c101.safetensor
 # Gehring 200: C1_2_1 → dqn_200_C1_2_1.safetensor  
@@ -163,9 +184,11 @@ The system implements an **instance-specific learning approach** where:
 ```
 
 ### Fallback Strategy
-- If **DQN model exists**: Use trained neural network solution
+
+- If **DQN model exists**: Use DQN-ALNS with learned operator selection
 - If **no model available**: Fallback to OR-Tools classical optimization
-- **Hybrid approach**: Combine learned heuristics with constraint solving
+- **Error handling**: Automatic fallback on DQN execution errors
+- **Hybrid approach**: Combines neural network learning with metaheuristic search
 
 ## 🔧 Configuration & Customization
 

@@ -1,6 +1,4 @@
-"""
-VRPTW Solver using OR-Tools.
-"""
+
 
 from typing import List, Tuple, Dict, Any
 import time
@@ -10,21 +8,15 @@ from src.utils.data_loader import Customer
 def solve_vrptw(depot: Customer, customers: List[Customer], vehicle_capacity: int, num_vehicles: int) -> Dict[str, Any]:
     """
     Solve VRPTW using OR-Tools.
-
-    Args:
-        depot: Depot customer.
-        customers: List of customers.
-        vehicle_capacity: Capacity of each vehicle.
-        num_vehicles: Number of vehicles.
-
-    Returns:
-        Dict with routes, total_distance, execution_time, violations.
     """
+    print(f"[OR-Tools] Starting solver...")
+    print(f"[OR-Tools] Customers: {len(customers)}, Vehicles: {num_vehicles}, Capacity: {vehicle_capacity}")
+    
     try:
         from ortools.constraint_solver import routing_enums_pb2
         from ortools.constraint_solver import pywrapcp
     except ImportError:
-        raise ImportError("ortools not installed. Please install with: uv add ortools")
+        raise ImportError("ortools not installed. Please install with: pip install ortools")
 
     start_time = time.time()
 
@@ -108,14 +100,17 @@ def solve_vrptw(depot: Customer, customers: List[Customer], vehicle_capacity: in
     search_parameters.solution_limit = 100
 
     # Solve the problem
+    print(f"[OR-Tools] Running optimization...")
     solution = routing.SolveWithParameters(search_parameters)
 
     execution_time = time.time() - start_time
+    print(f"[OR-Tools] Completed in {execution_time:.2f}s")
 
     if solution:
         routes = extract_routes(manager, routing, solution)
         total_distance = solution.ObjectiveValue()
         violations = check_violations(routes, data)
+        print(f"[OR-Tools] Found solution: {len(routes)} routes, distance: {total_distance:.2f}")
         return {
             'routes': routes,
             'total_distance': total_distance,
@@ -123,6 +118,7 @@ def solve_vrptw(depot: Customer, customers: List[Customer], vehicle_capacity: in
             'violations': violations
         }
     else:
+        print(f"[OR-Tools] No solution found!")
         return {
             'routes': [],
             'total_distance': 0,

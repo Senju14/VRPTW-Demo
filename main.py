@@ -1,6 +1,3 @@
-"""
-Entry point for VRPTW Demo.
-"""
 
 from src.backend.app import app
 

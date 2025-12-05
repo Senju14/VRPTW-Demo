@@ -20,6 +20,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from safetensors.torch import load_file
 
+# [DQN SOLVER] Setup Device (GPU if available)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"[DQN SOLVER] Using device: {device}")
+if device.type == 'cuda':
+    print(f"[DQN SOLVER] GPU Name: {torch.cuda.get_device_name(0)}")
+
 
 # ==================== SOLUTION REPRESENTATION ====================
 
@@ -276,13 +282,14 @@ class QNetwork(nn.Module):
 class DQNAgent:
   
     def __init__(self, state_size, action_size):
-        self.device = torch.device("cpu")
+        self.device = device  # Use global device setting
         self.model = QNetwork(state_size, action_size).to(self.device)
         
     def load_weights(self, model_path):
        
         weights = load_file(model_path)
         self.model.load_state_dict(weights)
+        self.model.to(self.device)  # Ensure model is on correct device
         self.model.eval()
         
     def select_action(self, state, epsilon=0.0):

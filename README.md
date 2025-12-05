@@ -17,8 +17,44 @@ Hệ thống cung cấp giao diện học thuật để giải quyết và trự
 ### Yêu cầu hệ thống
 - Python 3.10 trở lên
 - Git
+- uv (Khuyên dùng để cài đặt nhanh hơn)
 
 ### Các bước cài đặt
+
+#### Cách 1: Sử dụng uv (Khuyên dùng - Tốc độ cao)
+
+1. **Cài đặt uv (nếu chưa có):**
+   ```bash
+   pip install uv
+   ```
+
+2. **Clone và Setup:**
+   ```bash
+   git clone https://github.com/Senju14/VRPTW-Demo.git
+   cd VRPTW-Demo
+   
+   # Tạo môi trường ảo bằng uv
+   uv venv
+   
+   # Kích hoạt (Windows PowerShell)
+   .venv\Scripts\Activate.ps1
+   # Kích hoạt (Linux/Mac)
+   source .venv/bin/activate
+   ```
+
+3. **Cài đặt dependencies:**
+   ```bash
+   # Cài đặt các thư viện cơ bản
+   uv pip install -r requirements.txt
+   ```
+   
+   **Nếu dùng GPU (NVIDIA):**
+   ```bash
+   # Cài đè PyTorch bản CUDA
+   uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+   ```
+
+#### Cách 2: Sử dụng pip truyền thống
 
 1. **Clone repository từ nhánh master:**
    ```bash
@@ -40,16 +76,34 @@ Hệ thống cung cấp giao diện học thuật để giải quyết và trự
    ```
 
 3. **Cài đặt dependencies:**
+   
+   **Lựa chọn 1: Chạy trên CPU (Mặc định)**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Chạy ứng dụng:**
+   **Lựa chọn 2: Chạy trên GPU (Khuyên dùng nếu có NVIDIA GPU)**
+   ```bash
+   # Cài đặt các thư viện cơ bản trước
+   pip install -r requirements.txt
+   
+   # Sau đó cài đè PyTorch bản CUDA
+   pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+   ```
+
+### Kiểm tra và Chạy ứng dụng
+
+1. **Kiểm tra GPU (Tùy chọn):**
+   ```bash
+   python src/utils/check_gpu.py
+   ```
+
+2. **Chạy ứng dụng:**
    ```bash
    python main.py
    ```
 
-5. **Truy cập giao diện:**
+3. **Truy cập giao diện:**
    - Mở trình duyệt web: http://127.0.0.1:5000
    - Lưu ý: Không mở trực tiếp file index.html
 
@@ -71,21 +125,6 @@ Hệ thống cung cấp giao diện học thuật để giải quyết và trự
 3. **Cấu hình Tham số**: Điều chỉnh số lượng xe (mặc định: tự động)
 4. **Chạy Giải thuật**: Nhấn "Run Inference" để tối ưu hóa tuyến đường
 5. **Xem Kết quả**: Quan sát tuyến đường và metrics trên bản đồ
-
-## Xử lý Lỗi
-
-**Lỗi "ModuleNotFoundError":**
-```bash
-# Windows PowerShell
-$env:PYTHONPATH="."
-
-# Linux/Mac
-export PYTHONPATH="."
-```
-
-**Lỗi HTTP 400:** Kiểm tra instance đã load và constraints solver
-
-**Không hiển thị tuyến:** Tăng số xe hoặc thời gian giải
 
 ## Ghi chú
 

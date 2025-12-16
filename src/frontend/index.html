@@ -29,14 +29,31 @@
                 <input type="number" id="num-vehicles" min="1" max="50" value="5">
             </div>
             <div class="control-group">
-                <label for="time-window-multiplier">Time Window Multiplier:</label>
-                <input type="number" id="time-window-multiplier" min="0.5" max="2" step="0.1" value="1.0">
-                <small>Adjust time window constraints</small>
+                <label>Solver Selection (for comparison):</label>
+                <div class="solver-checkboxes">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="solver-alns" value="alns" checked>
+                        <span>ALNS</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="solver-dqn" value="dqn" checked>
+                        <span>DQN</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="solver-dqn-alns" value="dqn_alns" checked>
+                        <span>ALNS + DQN</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="solver-ortools" value="ortools" checked>
+                        <span>OR-Tools</span>
+                    </label>
+                </div>
+                <small>Select one or more solvers to compare</small>
             </div>
             <div class="control-group">
                 <button id="load-instance-btn" class="btn btn-primary">Load Instance</button>
-                <button id="run-inference-btn" class="btn btn-success" disabled>Run Inference</button>
-                <button id="clear-btn" class="btn btn-secondary">Clear Map</button>
+                <button id="run-comparison-btn" class="btn btn-success" disabled>Run Comparison</button>
+                <button id="clear-btn" class="btn btn-secondary">Clear</button>
             </div>
             <!-- Instance Info Panel -->
             <div class="info-panel" id="instance-info">
@@ -54,46 +71,55 @@
                     <span id="vehicle-capacity" class="info-value">-</span>
                 </div>
             </div>
-            <!-- Metrics Panel -->
-            <div class="metrics-panel">
-                <h3>Solution Metrics</h3>
-                <div class="metric-item">
-                    <span class="metric-label">Total Distance:</span>
-                    <span id="total-distance" class="metric-value">-</span>
+
+            <!-- Comparison Results Panel (inside sidebar) -->
+            <div class="comparison-panel" id="comparison-panel" style="display: none;">
+                <h3>Comparison Results</h3>
+                <div class="comparison-controls">
+                    <button id="export-csv-btn" class="btn btn-export">Export CSV</button>
+                    <button id="expand-comparison-btn" class="btn btn-secondary">Toggle</button>
                 </div>
-                <div class="metric-item">
-                    <span class="metric-label">Total Time:</span>
-                    <span id="total-time" class="metric-value">-</span>
-                </div>
-                <div class="metric-item">
-                    <span class="metric-label">Avg Distance/Vehicle:</span>
-                    <span id="avg-distance" class="metric-value">-</span>
-                </div>
-                <div class="metric-item">
-                    <span class="metric-label">Vehicles Used:</span>
-                    <span id="vehicles-used" class="metric-value">-</span>
-                </div>
-                <div class="metric-item">
-                    <span class="metric-label">Customers Served:</span>
-                    <span id="customers-served" class="metric-value">-</span>
-                </div>
-                <div class="metric-item">
-                    <span class="metric-label">Coverage:</span>
-                    <span id="coverage" class="metric-value">-</span>
-                </div>
+                <div id="comparison-table-container"></div>
             </div>
             <!-- Status -->
             <div id="status" class="status"></div>
         </div>
         <!-- Map Container -->
         <div class="map-container">
-            <div id="map"></div>
+            <div class="maps-grid">
+                <div class="map-item">
+                    <div class="map-label">ALNS</div>
+                    <div id="map-alns" class="map"></div>
+                </div>
+                <div class="map-item">
+                    <div class="map-label">DQN</div>
+                    <div id="map-dqn" class="map"></div>
+                </div>
+                <div class="map-item">
+                    <div class="map-label">ALNS + DQN</div>
+                    <div id="map-dqn-alns" class="map"></div>
+                </div>
+                <div class="map-item">
+                    <div class="map-label">OR-Tools</div>
+                    <div id="map-ortools" class="map"></div>
+                </div>
+            </div>
+        </div>
+        <!-- Comparison Results Panel (relocated for better layout) -->
+        <div class="comparison-panel" id="comparison-panel" style="display: none;">
+            <h3>Comparison Results</h3>
+            <div class="comparison-controls">
+                <button id="export-csv-btn" class="btn btn-export">Export CSV</button>
+                <button id="export-json-btn" class="btn btn-export">Export JSON</button>
+                <button id="expand-comparison-btn" class="btn btn-secondary">Toggle Fullscreen</button>
+            </div>
+            <div id="comparison-table-container"></div>
         </div>
     </div>
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- App Scripts -->
-    <script src="/static/solomon-parser.js"></script>
+    <script src="/static/parser.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

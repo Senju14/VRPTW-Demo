@@ -4,13 +4,14 @@
 
 ## Tổng quan Dự án
 
-Hệ thống cung cấp giao diện học thuật để giải quyết và trực quan hóa các bài toán VRPTW sử dụng thư viện tối ưu hóa OR-Tools của Google, kết hợp với mô hình DQN.
+Hệ thống cung cấp giao diện học thuật để giải quyết và trực quan hóa các bài toán VRPTW sử dụng nhiều thuật toán tối ưu hóa khác nhau, kết hợp với mô hình DQN.
 
 **Tính năng chính:**
 - Giao diện web tương tác với bản đồ Việt Nam
 - Hỗ trợ dataset Solomon và Gehring-Homberger
+- Hỗ trợ nhiều bộ giải: OR-Tools, ALNS, DQN-only, DQN + ALNS (hybrid)
 - Tích hợp mô hình DQN Learn-to-Solve
-- Trực quan hóa tuyến đường thời gian thực
+- Trực quan hóa tuyến đường và so sánh kết quả nhiều solver theo bảng metrics
 
 ## Cài đặt và Chạy
 
@@ -109,29 +110,65 @@ Hệ thống cung cấp giao diện học thuật để giải quyết và trự
 
 ## Dependencies
 
-- **Flask** 3.0.0: Web framework
-- **OR-Tools** 9.7.0: Thuật toán tối ưu hóa
-- **PyTorch** 2.0.0: Mô hình DQN
-- **Folium** 0.14.0: Trực quan hóa bản đồ
-- **Pandas** 2.0.0: Xử lý dữ liệu
-- **Flask-CORS** 4.0.0: Cross-origin support
-- **Safetensors** 0.4.0: Lưu trữ mô hình DQN
-- **NumPy** 1.24.0: Tính toán số học
+- **Flask** (`flask>=3.0.0`): Web backend
+- **Flask-CORS** (`flask-cors>=4.0.0`): CORS cho frontend
+- **OR-Tools** (`ortools>=9.7.0`): Bộ giải VRPTW baseline
+- **PyTorch** (`torch>=2.0.0`): Mô hình DQN
+- **Safetensors** (`safetensors>=0.4.0`): Lưu trữ trọng số DQN
+- **Folium** (`folium>=0.14.0`): Trực quan hóa bản đồ
+- **Pandas** (`pandas>=2.0.0`): Xử lý dữ liệu
+- **NumPy** (`numpy>=1.24.0`): Tính toán số học
+- **Packaging** (`packaging>=21.0`): Hỗ trợ so sánh phiên bản
+
+> Tất cả các dependency trên đều đã được liệt kê trong `requirements.txt`.
+
+## Cấu trúc thư mục chính
+
+- **Backend**
+  - `main.py`: Điểm vào để chạy ứng dụng Flask.
+  - `src/backend/app.py`: Khởi tạo Flask app, các API `/api/*`, điều phối chọn solver.
+  - `src/backend/solver.py`: File cha, chứa utilities chung (đánh giá solution, DQN agent, v.v.) và export các hàm:
+    - `solve_vrptw` (OR-Tools)
+    - `solve_alns_vrptw` (ALNS)
+    - `solve_dqn_only_vrptw` (DQN-only)
+    - `solve_dqn_alns_vrptw` (DQN + ALNS)
+  - `src/backend/algorithms/`: Chỉ chứa code từng thuật toán:
+    - `ortools_solver.py`
+    - `alns_solver.py`
+    - `dqn_only_solver.py`
+    - `dqn_alns_solver.py`
+  - `src/backend/data_loader.py`: Đọc instance Solomon & Gehring-Homberger.
+  - `src/backend/visualization.py`: Sinh HTML map bằng Folium.
+
+- **Frontend**
+  - `src/frontend/index.html`: Giao diện chính.
+  - `src/frontend/static/app.js`: Logic frontend, gọi API backend, vẽ bản đồ, bảng so sánh solver.
+  - `src/frontend/static/parser.js`: Parse file instance VRPTW (Solomon / Gehring-Homberger format).
+  - `src/frontend/static/style.css`: Giao diện UI.
+
+- **Dữ liệu & mô hình**
+  - `data/Solomon/`: Dataset Solomon.
+  - `data/Gehring_Homberger/`: Dataset Gehring-Homberger (200–1000 khách).
+  - `models/`: Chứa các file mô hình DQN (`*.safetensor`) tương ứng từng instance.
 
 ## Hướng dẫn Sử dụng
 
-1. **Chọn Instance**: Lựa chọn từ danh sách Solomon (c101, r101, rc101...)
-2. **Load Instance**: Nhấn "Load Instance" để hiển thị khách hàng trên bản đồ
-3. **Cấu hình Tham số**: Điều chỉnh số lượng xe (mặc định: tự động)
-4. **Chạy Giải thuật**: Nhấn "Run Inference" để tối ưu hóa tuyến đường
-5. **Xem Kết quả**: Quan sát tuyến đường và metrics trên bản đồ
+1. **Chọn Instance**: Lựa chọn từ danh sách Solomon và Gehring-Homberger trong combobox.
+2. **Load Instance**: Nhấn **"Load Instance"** để hiển thị khách hàng & depot trên bản đồ.
+3. **Chọn solver**: Tick chọn một hoặc nhiều solver (ALNS, DQN, DQN+ALNS, OR-Tools) để so sánh.
+4. **Cấu hình Tham số**: Điều chỉnh số lượng xe (nếu để mặc định, hệ thống dùng cấu hình hợp lý cho instance).
+5. **Chạy giải thuật**: Nhấn **"Run Comparison"** để chạy các solver đã chọn.
+6. **Xem kết quả**:
+   - Quan sát tuyến đường của từng solver trên 4 bản đồ.
+   - Xem bảng **Comparison Results**: distance, time, số xe, số khách phục vụ, coverage, average distance.
 
 ## Ghi chú
 
-- Instance nhỏ (100 khách hàng): Giải trong vài giây
-- Instance lớn (1000+ khách hàng): 1-2 phút
-- Hệ thống tự động chọn mô hình DQN hoặc OR-Tools
-- Tọa độ được chuyển đổi theo khu vực TP.HCM
+- Instance nhỏ (≈100 khách hàng): Thời gian giải thường vài giây.
+- Instance lớn (1000+ khách hàng): Có thể mất 1–2 phút tùy solver và cấu hình máy.
+- Nếu có sẵn mô hình DQN tương ứng trong `models/`, bạn có thể dùng chế độ **DQN** hoặc **DQN + ALNS**.
+- Nếu không có mô hình, bạn vẫn có thể chạy **ALNS** hoặc **OR-Tools** (baseline).
+- Tọa độ được chuẩn hóa và ánh xạ về khu vực TP.HCM để dễ quan sát trên bản đồ.
 
 ---
 

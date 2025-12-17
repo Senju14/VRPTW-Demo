@@ -3,88 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VRPTW Visualization</title>
-    <!-- Leaflet CSS -->
+    <title>VRPTW Demo</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <!-- Controls Panel -->
         <div class="controls-panel">
             <h2>VRPTW Controls</h2>
+            
             <div class="control-group">
-                <label for="instance-select">Solomon Instance:</label>
+                <label for="instance-select">Instance:</label>
                 <select id="instance-select">
-                    <option value="">Select instance...</option>
-                    <option value="c101">C101</option>
-                    <option value="c102">C102</option>
-                    <option value="r101">R101</option>
-                    <option value="r102">R102</option>
+                    <option value="">Loading instances...</option>
                 </select>
             </div>
+
             <div class="control-group">
-                <label for="num-vehicles">Number of Vehicles:</label>
-                <input type="number" id="num-vehicles" min="1" max="50" value="5">
+                <label for="num-vehicles">Vehicles:</label>
+                <input type="number" id="num-vehicles" min="1" max="100" value="10">
             </div>
+
             <div class="control-group">
-                <label>Solver Selection (for comparison):</label>
+                <label>Solvers:</label>
                 <div class="solver-checkboxes">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="solver-alns" value="alns" checked>
-                        <span>ALNS</span>
+                        <input type="checkbox" id="solver-alns" value="alns" checked> <span>ALNS</span>
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="solver-dqn" value="dqn" checked>
-                        <span>DQN</span>
+                        <input type="checkbox" id="solver-dqn" value="dqn" checked> <span>DQN</span>
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="solver-dqn-alns" value="dqn_alns" checked>
-                        <span>ALNS + DQN</span>
+                        <input type="checkbox" id="solver-dqn-alns" value="dqn_alns" checked> <span>Hybrid (DQN+ALNS)</span>
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="solver-ortools" value="ortools" checked>
-                        <span>OR-Tools</span>
+                        <input type="checkbox" id="solver-ortools" value="ortools" checked> <span>OR-Tools</span>
                     </label>
-                </div>
-                <small>Select one or more solvers to compare</small>
-            </div>
-            <div class="control-group">
-                <button id="load-instance-btn" class="btn btn-primary">Load Instance</button>
-                <button id="run-comparison-btn" class="btn btn-success" disabled>Run Comparison</button>
-                <button id="clear-btn" class="btn btn-secondary">Clear</button>
-            </div>
-            <!-- Instance Info Panel -->
-            <div class="info-panel" id="instance-info">
-                <h3>Instance Info</h3>
-                <div class="info-item">
-                    <span class="info-label">Instance:</span>
-                    <span id="instance-name" class="info-value">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Total Customers:</span>
-                    <span id="total-customers" class="info-value">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Vehicle Capacity:</span>
-                    <span id="vehicle-capacity" class="info-value">-</span>
                 </div>
             </div>
 
-            <!-- Comparison Results Panel (inside sidebar) -->
-            <div class="comparison-panel" id="comparison-panel" style="display: none;">
-                <h3>Comparison Results</h3>
-                <div class="comparison-controls">
-                    <button id="export-csv-btn" class="btn btn-export">Export CSV</button>
-                    <button id="expand-comparison-btn" class="btn btn-secondary">Toggle</button>
-                </div>
-                <div id="comparison-table-container"></div>
+            <div class="control-group">
+                <button id="load-instance-btn" class="btn btn-primary">Load Instance</button>
+                <button id="run-comparison-btn" class="btn btn-success" disabled>Run Comparison</button>
+                <button id="clear-btn" class="btn btn-secondary">Clear All</button>
             </div>
-            <!-- Status -->
+
+            <div class="info-panel" id="instance-info">
+                <h3>Instance Info</h3>
+                <div class="info-item"><span class="info-label">Name:</span> <span id="instance-name" class="info-value">-</span></div>
+                <div class="info-item"><span class="info-label">Customers:</span> <span id="total-customers" class="info-value">-</span></div>
+                <div class="info-item"><span class="info-label">Capacity:</span> <span id="vehicle-capacity" class="info-value">-</span></div>
+            </div>
+
             <div id="status" class="status"></div>
         </div>
-        <!-- Map Container -->
+
         <div class="map-container">
             <div class="maps-grid">
                 <div class="map-item">
@@ -96,7 +69,7 @@
                     <div id="map-dqn" class="map"></div>
                 </div>
                 <div class="map-item">
-                    <div class="map-label">ALNS + DQN</div>
+                    <div class="map-label">Hybrid</div>
                     <div id="map-dqn-alns" class="map"></div>
                 </div>
                 <div class="map-item">
@@ -105,20 +78,18 @@
                 </div>
             </div>
         </div>
-        <!-- Comparison Results Panel (relocated for better layout) -->
+
         <div class="comparison-panel" id="comparison-panel" style="display: none;">
-            <h3>Comparison Results</h3>
+            <h3>Results Comparison</h3>
             <div class="comparison-controls">
                 <button id="export-csv-btn" class="btn btn-export">Export CSV</button>
-                <button id="export-json-btn" class="btn btn-export">Export JSON</button>
-                <button id="expand-comparison-btn" class="btn btn-secondary">Toggle Fullscreen</button>
+                <button id="expand-comparison-btn" class="btn btn-secondary">Toggle View</button>
             </div>
             <div id="comparison-table-container"></div>
         </div>
     </div>
-    <!-- Leaflet JS -->
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- App Scripts -->
     <script src="/static/parser.js"></script>
     <script src="/static/app.js"></script>
 </body>

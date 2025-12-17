@@ -2,20 +2,15 @@ import copy
 import math
 import random
 import time
-from typing import List, Tuple
+from typing import Dict, List, Tuple, Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from safetensors.torch import load_file
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 from src.backend.data_loader import Customer
-
-# Import các hàm solver từ algorithms
-from src.backend.algorithms.ortools_solver import solve_vrptw
-from src.backend.algorithms.alns_solver import solve_alns_vrptw
-from src.backend.algorithms.dqn_only_solver import solve_dqn_only_vrptw
-from src.backend.algorithms.dqn_alns_solver import solve_dqn_alns_vrptw
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +341,268 @@ def run_dqn_loop(
 
 
 # ---------------------------------------------------------------------------
-# Public API - expose các hàm từ algorithms
+# Solver Implementations
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# OR-Tools Solver
+# ---------------------------------------------------------------------------
+
+def solve_vrptw(
+    depot: Customer,
+    customers: List[Customer],
+    capacity: int,
+    num_vehicles: int,
+) -> Dict[str, Any]:
+    """Solve VRPTW using OR-Tools."""
+    start = time.time()
+    all_customers = [depot] + customers
+    locs = [(c.x, c.y) for c in all_customers]
+    demands = [c.demand for c in all_customers]
+    tw = [(c.ready_time, c.due_date) for c in all_customers]
+
+    dist: List[List[int]] = []
+    for i in range(len(locs)):
+        row: List[int] = []
+        for j in range(len(locs)):
+            d = math.hypot(locs[i][0] - locs[j][0], locs[i][1] - locs[j][1])
+            row.append(int(d))
+        dist.append(row)
+
+    time_matrix = dist
+    manager = pywrapcp.RoutingIndexManager(len(locs), num_vehicles, 0)
+    routing = pywrapcp.RoutingModel(manager)
+
+    def distance_cb(from_index, to_index):
+        a = manager.IndexToNode(from_index)
+        b = manager.IndexToNode(to_index)
+        return dist[a][b]
+
+    transit_index = routing.RegisterTransitCallback(distance_cb)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_index)
+
+    def demand_cb(from_index):
+        a = manager.IndexToNode(from_index)
+        return demands[a]
+
+    demand_index = routing.RegisterUnaryTransitCallback(demand_cb)
+    routing.AddDimensionWithVehicleCapacity(
+        demand_index,
+        capacity // 10,
+        [capacity] * num_vehicles,
+        True,
+        "Capacity",
+    )
+
+    def time_cb(from_index, to_index):
+        a = manager.IndexToNode(from_index)
+        b = manager.IndexToNode(to_index)
+        return time_matrix[a][b]
+
+    time_index = routing.RegisterTransitCallback(time_cb)
+    max_time = max(b for _, b in tw) + 1000
+    routing.AddDimension(
+        time_index,
+        max_time,
+        max_time,
+        False,
+        "Time",
+    )
+    time_dim = routing.GetDimensionOrDie("Time")
+
+    for i, (a, b) in enumerate(tw):
+        if i == 0:
+            continue
+        idx = manager.NodeToIndex(i)
+        time_dim.CumulVar(idx).SetRange(a, b)
+
+    for v in range(num_vehicles):
+        routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.Start(v)))
+        routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.End(v)))
+
+    penalty = 1_000_000
+    for node in range(1, len(tw)):
+        routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+
+    params = pywrapcp.DefaultRoutingSearchParameters()
+    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.AUTOMATIC
+    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.AUTOMATIC
+    params.time_limit.seconds = 60
+    params.solution_limit = 100
+
+    solution = routing.SolveWithParameters(params)
+    elapsed = time.time() - start
+
+    if not solution:
+        return {
+            "routes": [],
+            "total_distance": 0,
+            "execution_time": elapsed,
+            "violations": ["no_solution"],
+        }
+
+    routes: List[List[int]] = []
+    for v in range(num_vehicles):
+        idx = routing.Start(v)
+        r: List[int] = []
+        while not routing.IsEnd(idx):
+            node = manager.IndexToNode(idx)
+            r.append(node)
+            idx = solution.Value(routing.NextVar(idx))
+        if r:
+            routes.append(r)
+
+    total_distance = solution.ObjectiveValue()
+    return {
+        "routes": routes,
+        "total_distance": total_distance,
+        "execution_time": elapsed,
+        "violations": [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ALNS Solver
+# ---------------------------------------------------------------------------
+
+def solve_alns_vrptw(
+    depot: Customer,
+    customers: List[Customer],
+    capacity: int,
+    num_vehicles: int,
+    iterations: int = 300,
+) -> Dict[str, Any]:
+    """Solve VRPTW using ALNS."""
+    destroy_ops = [random_removal, route_removal]
+    weights = [1.0] * len(destroy_ops)
+    scores = [0.0] * len(destroy_ops)
+    uses = [0] * len(destroy_ops)
+    seg = 100
+    R1, R2, R3 = 5, 2, 1
+    alpha = 0.1
+    t0, t1 = 100.0, 0.1
+
+    best = create_initial_solution(depot, customers, capacity, num_vehicles)
+    cur = copy.deepcopy(best)
+    start = time.time()
+
+    def pick(ws):
+        s = sum(ws)
+        if s == 0:
+            return random.randint(0, len(ws) - 1)
+        r = random.uniform(0, s)
+        c = 0
+        for i, w in enumerate(ws):
+            c += w
+            if r <= c:
+                return i
+        return len(ws) - 1
+
+    for it in range(1, iterations + 1):
+        new = copy.deepcopy(cur)
+        d_idx = pick(weights)
+        op = destroy_ops[d_idx]
+
+        if op is random_removal:
+            k = random.randint(5, 15)
+            removed = op(new, depot, capacity, k)
+        else:
+            m = min(len(new.routes), max(1, len(new.routes) // 3))
+            k = random.randint(1, m)
+            removed = op(new, depot, capacity, k)
+
+        greedy_insertion(new, removed, depot, capacity, num_vehicles)
+        evaluate_solution(new, depot, capacity)
+
+        score = 0
+        if len(new.routes) <= num_vehicles:
+            if new.total_cost < best.total_cost:
+                best = copy.deepcopy(new)
+                cur = copy.deepcopy(new)
+                score = R1
+            elif new.total_cost < cur.total_cost:
+                cur = copy.deepcopy(new)
+                score = R2
+            else:
+                delta = new.total_cost - cur.total_cost
+                temp = t0 * (t1 / t0) ** (it / iterations)
+                if math.exp(-delta / temp) > random.random():
+                    cur = copy.deepcopy(new)
+                    score = R3
+
+        scores[d_idx] += score
+        uses[d_idx] += 1
+
+        if it % seg == 0:
+            for i in range(len(destroy_ops)):
+                if uses[i]:
+                    w = scores[i] / uses[i]
+                    weights[i] = weights[i] * (1 - alpha) + alpha * w
+                    scores[i] = 0
+                    uses[i] = 0
+
+    elapsed = time.time() - start
+    routes = routes_to_indices(best)
+    return {
+        "routes": routes,
+        "total_distance": best.total_cost,
+        "execution_time": elapsed,
+        "violations": [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# DQN-only Solver
+# ---------------------------------------------------------------------------
+
+def solve_dqn_only_vrptw(
+    depot: Customer,
+    customers: List[Customer],
+    capacity: int,
+    num_vehicles: int,
+    model_path: str,
+    iterations: int = 300,
+) -> Dict[str, Any]:
+    """Solve VRPTW using DQN-only (without ALNS)."""
+    routes, cost, t = run_dqn_loop(
+        depot,
+        customers,
+        capacity,
+        num_vehicles,
+        model_path,
+        iterations,
+        accept_prob=0.05,
+    )
+    return {"routes": routes, "total_distance": cost, "execution_time": t, "violations": []}
+
+
+# ---------------------------------------------------------------------------
+# DQN + ALNS Hybrid Solver
+# ---------------------------------------------------------------------------
+
+def solve_dqn_alns_vrptw(
+    depot: Customer,
+    customers: List[Customer],
+    capacity: int,
+    num_vehicles: int,
+    model_path: str,
+    iterations: int = 300,
+) -> Dict[str, Any]:
+    """Solve VRPTW using DQN + ALNS hybrid."""
+    routes, cost, t = run_dqn_loop(
+        depot,
+        customers,
+        capacity,
+        num_vehicles,
+        model_path,
+        iterations,
+        accept_prob=0.1,
+    )
+    return {"routes": routes, "total_distance": cost, "execution_time": t, "violations": []}
+
+
+# ---------------------------------------------------------------------------
+# Public API
 # ---------------------------------------------------------------------------
 
 __all__ = [

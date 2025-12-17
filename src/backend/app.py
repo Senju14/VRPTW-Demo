@@ -51,38 +51,24 @@ def serve_data_file(filename):
 def get_instances():
     try:
         instances = []
-        solomon_path = 'data/Solomon/'
+        # Sử dụng đường dẫn tuyệt đối giống như serve_data_file
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        solomon_path = os.path.join(base_dir, 'data', 'Solomon')
+        
         if os.path.exists(solomon_path):
             for f in os.listdir(solomon_path):
-                if f.endswith('.txt'):
+                # Chỉ lấy các file RC (rc101, rc102, rc201, rc202, ...)
+                if f.endswith('.txt') and f.lower().startswith('rc'):
                     name = f.replace('.txt', '').upper()
-                    m_path = f'models/dqn_{name.lower()}.safetensor'
+                    model_path = os.path.join(base_dir, 'models', f'dqn_{name.lower()}.safetensor')
                     instances.append({
                         'name': name, 'group': 'Solomon Benchmark',
-                        'path': f'Solomon/{f}', 'model_path': m_path if os.path.exists(m_path) else None,
-                        'has_model': os.path.exists(m_path)
+                        'path': f'Solomon/{f}', 
+                        'model_path': model_path if os.path.exists(model_path) else None,
+                        'has_model': os.path.exists(model_path)
                     })
 
-        gehring_base = 'data/Gehring_Homberger/'
-        gehring_map = {
-            'homberger_200_customer_instances': '200', 'homberger_400_customer_instances': '400',
-            'homberger_600_customer_instances': '600', 'homberger_800_customer_instances': '800',
-            'homberger_1000_customer_instances': '1000'
-        }
-        
-        for folder, size in gehring_map.items():
-            path = gehring_base + folder + '/'
-            if os.path.exists(path):
-                for f in os.listdir(path):
-                    if f.endswith('.TXT'):
-                        name = f.replace('.TXT', '')
-                        m_path = f'models/dqn_{size}_{name}.safetensor'
-                        instances.append({
-                            'name': name, 'group': f'Gehring-Homberger ({size} customers)',
-                            'path': f'Gehring_Homberger/{folder}/{f}',
-                            'model_path': m_path if os.path.exists(m_path) else None,
-                            'has_model': os.path.exists(m_path)
-                        })
+        # Bỏ qua Gehring-Homberger vì chỉ cần RC instances
         
         return jsonify(sorted(instances, key=lambda x: (x['group'], x['name'])))
     except Exception as e:
@@ -201,4 +187,5 @@ def get_map():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
     

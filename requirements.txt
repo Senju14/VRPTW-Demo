@@ -1,9 +1,6 @@
-flask>=3.0.0
-flask-cors>=4.0.0
-ortools>=9.7.0
-folium>=0.14.0
-pandas>=2.0.0
-torch>=2.0.0
-safetensors>=0.4.0
-numpy>=1.24.0
-packaging>=21.0
+flask==3.0.0
+flask-cors==4.0.0
+torch==2.1.0
+numpy==1.24.3
+safetensors==0.4.1
+ortools==9.8.3296

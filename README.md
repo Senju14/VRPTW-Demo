@@ -106,45 +106,14 @@ Hệ thống cung cấp giao diện học thuật để giải quyết và trự
 
 3. **Truy cập giao diện:**
    - Mở trình duyệt web: http://127.0.0.1:5000
-   - Lưu ý: Không mở trực tiếp file index.html
 
 ## Dependencies
 
-- **Flask** (`flask>=3.0.0`): Web backend
-- **Flask-CORS** (`flask-cors>=4.0.0`): CORS cho frontend
-- **OR-Tools** (`ortools>=9.7.0`): Bộ giải VRPTW baseline
-- **PyTorch** (`torch>=2.0.0`): Mô hình DQN
-- **Safetensors** (`safetensors>=0.4.0`): Lưu trữ trọng số DQN
-- **Folium** (`folium>=0.14.0`): Trực quan hóa bản đồ
-- **Pandas** (`pandas>=2.0.0`): Xử lý dữ liệu
-- **NumPy** (`numpy>=1.24.0`): Tính toán số học
-- **Packaging** (`packaging>=21.0`): Hỗ trợ so sánh phiên bản
-
+- `src/backend/` - API and solvers
+- `src/frontend/` - React UI
+- `data/Solomon/` - Benchmark instances
+- `models/` - Trained models (.safetensors)
 > Tất cả các dependency trên đều đã được liệt kê trong `requirements.txt`.
-
-## Cấu trúc thư mục chính
-
-- **Backend**
-  - `main.py`: Điểm vào để chạy ứng dụng Flask.
-  - `src/backend/app.py`: Khởi tạo Flask app, các API `/api/*`, điều phối chọn solver.
-  - `src/backend/solver.py`: File cha, chứa utilities chung (đánh giá solution, DQN agent, v.v.) và export các hàm:
-    - `solve_vrptw` (OR-Tools)
-    - `solve_alns_vrptw` (ALNS)
-    - `solve_dqn_only_vrptw` (DQN-only)
-    - `solve_dqn_alns_vrptw` (DQN + ALNS)
-  - `src/backend/algorithms/`: Chỉ chứa code từng thuật toán:
-    - `ortools_solver.py`
-    - `alns_solver.py`
-    - `dqn_only_solver.py`
-    - `dqn_alns_solver.py`
-  - `src/backend/data_loader.py`: Đọc instance Solomon & Gehring-Homberger.
-  - `src/backend/visualization.py`: Sinh HTML map bằng Folium.
-
-- **Frontend**
-  - `src/frontend/index.html`: Giao diện chính.
-  - `src/frontend/static/app.js`: Logic frontend, gọi API backend, vẽ bản đồ, bảng so sánh solver.
-  - `src/frontend/static/parser.js`: Parse file instance VRPTW (Solomon / Gehring-Homberger format).
-  - `src/frontend/static/style.css`: Giao diện UI.
 
 - **Dữ liệu & mô hình**
   - `data/Solomon/`: Dataset Solomon.
@@ -171,5 +140,3 @@ Hệ thống cung cấp giao diện học thuật để giải quyết và trự
 - Tọa độ được chuẩn hóa và ánh xạ về khu vực TP.HCM để dễ quan sát trên bản đồ.
 
 ---
-
-Dự án nghiên cứu học thuật về bài toán tối ưu hóa logistics với công nghệ web hiện đại.

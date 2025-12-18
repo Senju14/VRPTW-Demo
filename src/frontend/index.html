@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VRPTW Research Benchmarks</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="/static/style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRPTW Solver Workbench</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="app-layout">
@@ -18,13 +18,30 @@
             <div class="config-section">
                 <label class="section-label">1. Select Dataset (RC)</label>
                 <div class="control-row">
-                    <select id="instance-select" class="select-input">
+                    <label for="instance-select" class="visually-hidden">Select Dataset Instance</label>
+                    <select id="instance-select" class="select-input" aria-label="Select Dataset Instance">
                         <option value="">Loading...</option>
                     </select>
                 </div>
-                <button id="btn-load" class="btn btn-outline full-width" style="margin-top: 8px;">
+                <button id="btn-load" class="btn btn-outline full-width btn-margin-top" type="button">
                     <i class="fa-solid fa-map-location-dot"></i> Load Instance Map
                 </button>
+            </div>
+
+            <div class="info-panel" id="instance-info">
+                <h3><i class="fa-solid fa-circle-info"></i> Instance Info</h3>
+                <div class="info-item">
+                    <span class="info-label">Instance:</span>
+                    <span id="instance-name" class="info-value">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Total Customers:</span>
+                    <span id="total-customers" class="info-value">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Vehicle Capacity:</span>
+                    <span id="vehicle-capacity" class="info-value">-</span>
+                </div>
             </div>
 
             <div class="config-section">
@@ -40,8 +57,8 @@
             <div class="config-section">
                 <label class="section-label">3. Constraints</label>
                 <div class="input-group">
-                    <span>Max Vehicles</span>
-                    <input type="number" id="max-vehicles" value="25" min="1" max="100">
+                    <label for="max-vehicles">Max Vehicles</label>
+                    <input type="number" id="max-vehicles" value="25" min="1" max="100" placeholder="Enter max vehicles" title="Maximum number of vehicles">
                 </div>
             </div>
 
@@ -54,31 +71,51 @@
                 </button>
             </div>
 
+            <div class="metrics-panel" id="metrics-panel">
+                <h3><i class="fa-solid fa-chart-line"></i> Selected Results</h3>
+                <div class="metric-item">
+                    <span class="metric-label">Algorithm:</span>
+                    <span id="metric-algo" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Distance:</span>
+                    <span id="total-distance" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Time:</span>
+                    <span id="total-time" class="metric-value">-</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-label">Vehicles:</span>
+                    <span id="vehicles-used" class="metric-value">-</span>
+                </div>
+            </div>
+
             <div class="status-bar" id="status-bar">System Ready</div>
         </aside>
 
         <main class="main-view">
             <div class="grid-2x2">
-                <div class="map-cell">
+                <div class="map-cell" data-algo="ALNS">
                     <div class="map-header">ALNS <span class="metrics" id="meta-alns"></span></div>
                     <div id="map-alns" class="map-canvas"></div>
                 </div>
-                <div class="map-cell">
+                <div class="map-cell" data-algo="DQN">
                     <div class="map-header">DQN <span class="metrics" id="meta-dqn"></span></div>
                     <div id="map-dqn" class="map-canvas"></div>
                 </div>
-                <div class="map-cell">
+                <div class="map-cell" data-algo="DQN+ALNS">
                     <div class="map-header">DQN + ALNS <span class="metrics" id="meta-hybrid"></span></div>
                     <div id="map-hybrid" class="map-canvas"></div>
                 </div>
-                <div class="map-cell">
+                <div class="map-cell" data-algo="OR-Tools">
                     <div class="map-header">OR-Tools <span class="metrics" id="meta-ortools"></span></div>
                     <div id="map-ortools" class="map-canvas"></div>
                 </div>
             </div>
 
-            <button id="btn-toggle-table" class="floating-btn" style="display: none;">
-                <i class="fa-solid fa-table"></i> View Results
+            <button id="btn-toggle-table" class="floating-btn" type="button">
+                <i class="fa-solid fa-table"></i> View Comparison Table
             </button>
         </main>
     </div>
@@ -86,8 +123,8 @@
     <div id="result-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Comparative Results</h3>
-                <button class="close-modal">&times;</button>
+                <h3>Benchmark Comparison</h3>
+                <button type="button" class="close-modal" aria-label="Close modal" title="Close modal"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="table-container"></div>
         </div>

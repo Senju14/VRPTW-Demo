@@ -1,185 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VRPTW Logistics Optimizer</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VRPTW Research Benchmarks</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-    <div class="container">
+    <div class="app-layout">
         <aside class="sidebar">
-            <div class="logo">
-                <div class="logo-icon">🚚</div>
-                <h1>Route Optimizer</h1>
+            <div class="sidebar-header">
+                <h2>VRPTW<br><span class="subtitle">Research Benchmarks</span></h2>
             </div>
             
-            <div class="section">
-                <h3>Instance Selection</h3>
-                <select id="instance-select" multiple size="6" aria-label="Select instances">
-                </select>
-                <small>Hold Ctrl/Cmd for multiple</small>
+            <div class="config-section">
+                <label class="section-label">1. Select Dataset (RC)</label>
+                <div class="control-row">
+                    <select id="instance-select" class="select-input">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <button id="btn-load" class="btn btn-outline full-width" style="margin-top: 8px;">
+                    <i class="fa-solid fa-map-location-dot"></i> Load Instance Map
+                </button>
             </div>
-            
-            <div class="section">
-                <h3>Solver Algorithms</h3>
-                <label class="checkbox-label">
-                    <input type="checkbox" value="alns" checked>
-                    <span>ALNS</span>
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" value="dqn" checked>
-                    <span>DQN</span>
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" value="dqn_alns" checked>
-                    <span>DQN+ALNS</span>
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" value="ortools" checked>
-                    <span>OR-Tools</span>
-                </label>
+
+            <div class="config-section">
+                <label class="section-label">2. Algorithms</label>
+                <div class="algo-list">
+                    <label class="checkbox-row"><input type="checkbox" value="ALNS" checked> ALNS</label>
+                    <label class="checkbox-row"><input type="checkbox" value="DQN" checked> DQN</label>
+                    <label class="checkbox-row"><input type="checkbox" value="DQN+ALNS" checked> DQN+ALNS</label>
+                    <label class="checkbox-row"><input type="checkbox" value="OR-Tools" checked> OR-Tools</label>
+                </div>
             </div>
-            
-            <div class="section">
-                <h3>Preview Map</h3>
-                <select id="preview-select" aria-label="Preview instance">
-                    <option value="">Choose instance...</option>
-                </select>
-                <button id="preview-btn" class="btn btn-outline">Load Preview</button>
+
+            <div class="config-section">
+                <label class="section-label">3. Constraints</label>
+                <div class="input-group">
+                    <span>Max Vehicles</span>
+                    <input type="number" id="max-vehicles" value="25" min="1" max="100">
+                </div>
             </div>
-            
-            <div class="section">
-                <h3>Configuration</h3>
-                <label for="max-vehicles">Max Vehicles</label>
-                <input type="text" id="max-vehicles" value="15">
+
+            <div class="action-buttons">
+                <button id="btn-run" class="btn btn-black">
+                    <i class="fa-solid fa-play"></i> RUN BENCHMARK
+                </button>
+                <button id="btn-clear" class="btn btn-outline">
+                    <i class="fa-solid fa-trash"></i> CLEAR
+                </button>
             </div>
-            
-            <button id="run-btn" class="btn btn-primary">
-                <span>▶</span> Run Comparison
-            </button>
-            
-            <button id="clear-btn" class="btn btn-outline">Clear Maps</button>
-            
-            <div class="log-box">
-                <div class="log-title">Activity Log</div>
-                <div id="log-output" class="log-output"></div>
-            </div>
-            
-            <div id="status-bar" class="status-bar"></div>
+
+            <div class="status-bar" id="status-bar">System Ready</div>
         </aside>
-        
-        <main class="main-content">
-            <div class="grid-container">
-                <div class="grid-item">
-                    <div class="card-header">
-                        <span class="card-title">ALNS</span>
-                        <button class="expand-btn" data-index="0">⛶</button>
-                    </div>
-                    <div id="map-0" class="map-view"></div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span class="label">Vehicles</span>
-                            <span class="value" id="v-0">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Distance</span>
-                            <span class="value" id="d-0">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Time</span>
-                            <span class="value" id="t-0">-</span>
-                        </div>
-                    </div>
+
+        <main class="main-view">
+            <div class="grid-2x2">
+                <div class="map-cell">
+                    <div class="map-header">ALNS <span class="metrics" id="meta-alns"></span></div>
+                    <div id="map-alns" class="map-canvas"></div>
                 </div>
-                
-                <div class="grid-item">
-                    <div class="card-header">
-                        <span class="card-title">DQN</span>
-                        <button class="expand-btn" data-index="1">⛶</button>
-                    </div>
-                    <div id="map-1" class="map-view"></div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span class="label">Vehicles</span>
-                            <span class="value" id="v-1">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Distance</span>
-                            <span class="value" id="d-1">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Time</span>
-                            <span class="value" id="t-1">-</span>
-                        </div>
-                    </div>
+                <div class="map-cell">
+                    <div class="map-header">DQN <span class="metrics" id="meta-dqn"></span></div>
+                    <div id="map-dqn" class="map-canvas"></div>
                 </div>
-                
-                <div class="grid-item">
-                    <div class="card-header">
-                        <span class="card-title">DQN+ALNS</span>
-                        <button class="expand-btn" data-index="2">⛶</button>
-                    </div>
-                    <div id="map-2" class="map-view"></div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span class="label">Vehicles</span>
-                            <span class="value" id="v-2">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Distance</span>
-                            <span class="value" id="d-2">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Time</span>
-                            <span class="value" id="t-2">-</span>
-                        </div>
-                    </div>
+                <div class="map-cell">
+                    <div class="map-header">DQN + ALNS <span class="metrics" id="meta-hybrid"></span></div>
+                    <div id="map-hybrid" class="map-canvas"></div>
                 </div>
-                
-                <div class="grid-item">
-                    <div class="card-header">
-                        <span class="card-title">OR-Tools</span>
-                        <button class="expand-btn" data-index="3">⛶</button>
-                    </div>
-                    <div id="map-3" class="map-view"></div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span class="label">Vehicles</span>
-                            <span class="value" id="v-3">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Distance</span>
-                            <span class="value" id="d-3">-</span>
-                        </div>
-                        <div class="metric">
-                            <span class="label">Time</span>
-                            <span class="value" id="t-3">-</span>
-                        </div>
-                    </div>
+                <div class="map-cell">
+                    <div class="map-header">OR-Tools <span class="metrics" id="meta-ortools"></span></div>
+                    <div id="map-ortools" class="map-canvas"></div>
                 </div>
             </div>
-            
-            <button id="show-table-btn" class="floating-btn">
-                📊 View Results Table
+
+            <button id="btn-toggle-table" class="floating-btn" style="display: none;">
+                <i class="fa-solid fa-table"></i> View Results
             </button>
         </main>
     </div>
-    
-    <div id="table-modal" class="modal">
+
+    <div id="result-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Comparison Results</h2>
-                <button id="close-modal" class="close-btn">×</button>
+                <h3>Comparative Results</h3>
+                <button class="close-modal">&times;</button>
             </div>
-            <div class="modal-body">
-                <div id="table-wrapper"></div>
-            </div>
+            <div id="table-container"></div>
         </div>
     </div>
-    
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="app.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 </html>

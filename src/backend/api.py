@@ -1,174 +1,98 @@
-from flask import Blueprint, request, jsonify
-import os
-import glob
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import List
 import time
-import sys
-from .utils import VRPTWInstance, Solution
-from .alns import ALNS
-from .ortools_solver import solve_with_ortools
+from pathlib import Path
 
-api = Blueprint('api', __name__)
+# Import modules
+from .data_loader import list_rc_instances, parse_solomon
+from .ortools_solver import solve_ortools
+from .dummy_solvers import solve_placeholder
 
-def log_progress(message):
-    print(f"[BACKEND] {message}")
-    sys.stdout.flush()
+# Định vị thư mục frontend tuyệt đối
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+FRONTEND_DIR = BASE_DIR / "src" / "frontend"
 
-def solve_with_model(instance, model_type, max_vehicles):
-    log_progress(f"Solving {instance.name} with {model_type.upper()}")
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files với đường dẫn tuyệt đối
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+else:
+    print(f"⚠️ Warning: Không tìm thấy thư mục frontend tại {FRONTEND_DIR}")
+
+class ComparisonRequest(BaseModel):
+    instance: str
+    algorithms: List[str]
+    max_vehicles: int
+
+class InstanceRequest(BaseModel):
+    instance: str
+
+@app.get("/api/instances")
+def get_instances():
+    """Trả về danh sách file RC"""
+    return list_rc_instances()
+
+@app.post("/api/load_instance")
+def load_instance_details(req: InstanceRequest):
+    """API mới: Trả về dữ liệu thô để vẽ map"""
+    try:
+        data = parse_solomon(req.instance)
+        return {
+            "depot": data['depot'],
+            "customers": data['customers'],
+            "capacity": data['capacity']
+        }
+    except Exception as e:
+        print(f"Error loading instance: {e}")
+        raise HTTPException(status_code=404, detail=f"File not found or parse error: {str(e)}")
+
+@app.post("/api/run_comparison")
+def run_comparison(req: ComparisonRequest):
+    try:
+        data = parse_solomon(req.instance)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    results = []
     
-    if model_type == 'alns':
-        solver = ALNS(instance, max_iterations=100)
-        solution = solver.solve()
-    elif model_type in ['dqn', 'dqn_alns']:
-        model_path = f"models/{model_type}_{instance.name}.safetensors"
-        if os.path.exists(model_path):
-            log_progress(f"Loading model: {model_path}")
-            solver = ALNS(instance, max_iterations=100)
-            solution = solver.solve()
-        else:
-            log_progress(f"Model not found, using ALNS fallback")
-            solver = ALNS(instance, max_iterations=100)
-            solution = solver.solve()
-    else:
-        solver = ALNS(instance, max_iterations=100)
-        solution = solver.solve()
-    
-    while len(solution.routes) > max_vehicles and len(solution.routes) > 1:
-        routes_by_load = sorted(enumerate(solution.routes), 
-                               key=lambda x: sum(instance.demands[i] for i in x[1]))
-        idx1, route1 = routes_by_load[0]
-        idx2, route2 = routes_by_load[1]
+    for algo in req.algorithms:
+        t0 = time.time()
+        result = None
         
-        merged = route1 + route2
-        new_routes = [r for i, r in enumerate(solution.routes) if i not in [idx1, idx2]]
-        new_routes.append(merged)
-        
-        solution = Solution(new_routes, instance)
-        if not solution.feasible:
-            break
-    
-    log_progress(f"Solution: {len(solution.routes)} vehicles, distance: {solution.cost:.2f}")
-    return solution
-
-@api.route('/api/instances', methods=['GET'])
-def list_instances():
-    files = glob.glob('data/Solomon/rc*.txt')
-    instances = sorted([os.path.basename(f).replace('.txt', '') for f in files])
-    log_progress(f"Found {len(instances)} RC instances")
-    return jsonify(instances)
-
-@api.route('/api/load_preview', methods=['POST'])
-def load_preview():
-    data = request.json
-    instance_name = data.get('instance', 'rc101')
-    
-    instance_path = f"data/Solomon/{instance_name}.txt"
-    if not os.path.exists(instance_path):
-        return jsonify({'error': 'Instance not found'}), 404
-    
-    log_progress(f"Loading preview for {instance_name}")
-    instance = VRPTWInstance(instance_path)
-    
-    coords = instance.coords
-    min_x, max_x = coords[:, 0].min(), coords[:, 0].max()
-    min_y, max_y = coords[:, 1].min(), coords[:, 1].max()
-    
-    range_x = max_x - min_x
-    range_y = max_y - min_y
-    max_range = max(range_x, range_y)
-    
-    center_x = (min_x + max_x) / 2
-    center_y = (min_y + max_y) / 2
-    
-    def normalize(coord):
-        lat = ((coord[1] - center_y) / max_range) * 0.01
-        lng = ((coord[0] - center_x) / max_range) * 0.01
-        return {'lat': float(lat), 'lng': float(lng)}
-    
-    nodes = [normalize(coords[i]) for i in range(len(coords))]
-    
-    return jsonify({
-        'depot': nodes[0],
-        'customers': nodes[1:],
-        'name': instance_name.upper()
-    })
-
-@api.route('/api/run_comparison', methods=['POST'])
-def run_comparison():
-    data = request.json
-    instance_names = data['instances']
-    algorithms = data['algorithms']
-    max_vehicles = data['max_vehicles']
-    
-    log_progress("=" * 60)
-    log_progress(f"Starting comparison for {len(instance_names)} instances")
-    log_progress(f"Algorithms: {', '.join(algorithms)}")
-    log_progress(f"Max vehicles: {max_vehicles}")
-    log_progress("=" * 60)
-    
-    results = {'solutions': [], 'table': []}
-    
-    for inst_name in instance_names:
-        instance_path = f"data/Solomon/{inst_name}.txt"
-        if not os.path.exists(instance_path):
-            log_progress(f"Instance {inst_name} not found, skipping")
-            continue
-        
-        log_progress(f"\nProcessing instance: {inst_name.upper()}")
-        instance = VRPTWInstance(instance_path)
-        
-        for algo in algorithms:
-            start = time.time()
-            
-            if algo == 'ortools':
-                try:
-                    log_progress(f"Running OR-Tools...")
-                    solution = solve_with_ortools(instance, max_vehicles)
-                except Exception as e:
-                    log_progress(f"OR-Tools failed: {str(e)}")
-                    continue
+        try:
+            if algo == "OR-Tools":
+                result = solve_ortools(data, req.max_vehicles)
             else:
-                solution = solve_with_model(instance, algo, max_vehicles)
+                result = solve_placeholder(algo, data, req.max_vehicles)
             
-            solve_time = time.time() - start
-            
-            coords = instance.coords
-            min_x, max_x = coords[:, 0].min(), coords[:, 0].max()
-            min_y, max_y = coords[:, 1].min(), coords[:, 1].max()
-            
-            range_x = max_x - min_x
-            range_y = max_y - min_y
-            max_range = max(range_x, range_y)
-            
-            center_x = (min_x + max_x) / 2
-            center_y = (min_y + max_y) / 2
-            
-            def normalize(coord):
-                lat = ((coord[1] - center_y) / max_range) * 0.01
-                lng = ((coord[0] - center_x) / max_range) * 0.01
-                return {'lat': float(lat), 'lng': float(lng)}
-            
-            results['solutions'].append({
-                'instance': inst_name,
-                'algorithm': algo.upper().replace('_', '+'),
-                'vehicles': len(solution.routes),
-                'distance': float(solution.cost),
-                'time': solve_time,
-                'routes': [{'nodes': [normalize(coords[n]) for n in route]} 
-                          for route in solution.routes],
-                'depot': normalize(coords[0])
-            })
-            
-            results['table'].append({
-                'instance': inst_name.upper(),
-                'algorithm': algo.upper().replace('_', '+'),
-                'vehicles': len(solution.routes),
-                'distance': float(solution.cost),
-                'time': solve_time
-            })
-    
-    log_progress("=" * 60)
-    log_progress("Comparison completed successfully")
-    log_progress("=" * 60)
-    
-    return jsonify(results)
+            if result:
+                result["time"] = time.time() - t0
+                results.append(result)
+            else:
+                results.append({"algorithm": algo, "error": "No solution found"})
+                
+        except Exception as e:
+            print(f"Error algo {algo}: {e}")
+            results.append({"algorithm": algo, "error": str(e)})
+
+    return {"solutions": results}
+
+@app.get("/")
+def read_root():
+    """Trả về file index.html"""
+    index_path = FRONTEND_DIR / "index.html"
+    if not index_path.exists():
+        return {"error": f"index.html not found at {index_path}"}
+    return FileResponse(str(index_path))

@@ -1,29 +1,16 @@
-from flask import Flask, send_from_directory
-from flask_cors import CORS
+import uvicorn
 import os
 import sys
 
-sys.path.append(os.path.dirname(__file__))
+# Thêm src vào path để import module dễ dàng
+sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
-app = Flask(__name__)
-CORS(app)
-
-from src.backend.api import api
-app.register_blueprint(api)
-
-@app.route('/')
-def index():
-    return send_from_directory('src/frontend', 'index.html')
-
-@app.route('/<path:path>')
-def serve_frontend(path):
-    return send_from_directory('src/frontend', path)
-
-if __name__ == '__main__':
-    print("=" * 50)
-    print("VRPTW Solver Comparison System")
-    print("=" * 50)
-    print("Server starting on http://localhost:5000")
-    print("=" * 50)
-    app.run(debug=True, port=5000, host='0.0.0.0')
+if __name__ == "__main__":
+    # Chạy server tại port 8000
+    uvicorn.run(
+        "src.backend.api:app", 
+        host="127.0.0.1", 
+        port=8000, 
+        reload=True
+    )
     

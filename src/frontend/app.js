@@ -1,296 +1,253 @@
-let maps = [];
-let instances = [];
-let currentResults = null;
-let logs = [];
+let maps = {};
+const ALGORITHMS = ['ALNS', 'DQN', 'DQN+ALNS', 'OR-Tools'];
+const MAP_IDS = { 'ALNS': 'map-alns', 'DQN': 'map-dqn', 'DQN+ALNS': 'map-hybrid', 'OR-Tools': 'map-ortools' };
+let currentSolutionData = [];
+
+// Coordinate Transformation (Solomon 100x100 -> HCMC Lat/Lng)
+const HCMC_CENTER = [10.762622, 106.660172];
+const SCALE_FACTOR = 0.0008; // Adjust to spread points appropriately
+
+function transformCoords(x, y) {
+    return [
+        HCMC_CENTER[0] + (x - 50) * SCALE_FACTOR, 
+        HCMC_CENTER[1] + (y - 50) * SCALE_FACTOR
+    ];
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadInstances();
     initMaps();
-    setupListeners();
-    log('System ready');
+    await loadInstanceList();
+    setupEvents();
 });
 
-function log(msg) {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    logs.push(`[${time}] ${msg}`);
-    if (logs.length > 100) logs.shift();
-    
-    const output = document.getElementById('log-output');
-    output.innerHTML = logs.map(l => `<div class="log-entry">${l}</div>`).join('');
-    output.scrollTop = output.scrollHeight;
-}
-
-function status(msg, type = 'info') {
-    const bar = document.getElementById('status-bar');
-    bar.textContent = msg;
-    bar.style.color = type === 'error' ? 'var(--error)' : 
-                      type === 'success' ? 'var(--success)' : 'var(--text)';
-}
-
-async function loadInstances() {
-    try {
-        log('Loading instances...');
-        const res = await fetch('/api/instances');
-        instances = await res.json();
-        
-        const select = document.getElementById('instance-select');
-        const preview = document.getElementById('preview-select');
-        
-        const options = instances.map(i => `<option value="${i}">${i.toUpperCase()}</option>`).join('');
-        select.innerHTML = options;
-        preview.innerHTML = '<option value="">Choose...</option>' + options;
-        
-        log(`Loaded ${instances.length} instances`);
-    } catch (err) {
-        log(`Error: ${err.message}`);
-        status('Failed to load instances', 'error');
-    }
-}
-
 function initMaps() {
-    log('Initializing maps...');
-    for (let i = 0; i < 4; i++) {
-        const map = L.map(`map-${i}`, {
-            center: [0, 0],
-            zoom: 13,
-            zoomControl: true,
-            attributionControl: false
-        });
+    ALGORITHMS.forEach(algo => {
+        const id = MAP_IDS[algo];
+        if(!document.getElementById(id)) return;
         
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-            maxZoom: 19
+        // CartoDB Positron (Minimalist B&W)
+        const map = L.map(id, { zoomControl: false }).setView(HCMC_CENTER, 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '', maxZoom: 20
         }).addTo(map);
         
-        maps.push(map);
+        maps[algo] = map;
+    });
+}
+
+async function loadInstanceList() {
+    const select = document.getElementById('instance-select');
+    try {
+        const res = await fetch('/api/instances');
+        const list = await res.json();
+        select.innerHTML = '';
+        list.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item;
+            opt.textContent = item;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        setStatus('Failed to load instances', true);
     }
 }
 
-function setupListeners() {
-    document.getElementById('run-btn').addEventListener('click', runComparison);
-    document.getElementById('clear-btn').addEventListener('click', clearMaps);
-    document.getElementById('preview-btn').addEventListener('click', loadPreview);
-    document.getElementById('show-table-btn').addEventListener('click', showTable);
-    document.getElementById('close-modal').addEventListener('click', () => {
-        document.getElementById('table-modal').classList.remove('active');
+function setupEvents() {
+    document.getElementById('btn-load').addEventListener('click', loadInstancePreview);
+    document.getElementById('btn-run').addEventListener('click', runBenchmark);
+    document.getElementById('btn-clear').addEventListener('click', clearAllMaps);
+    
+    document.getElementById('btn-toggle-table').addEventListener('click', () => {
+        renderTable();
+        document.getElementById('result-modal').style.display = 'flex';
     });
     
-    document.querySelectorAll('.expand-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const idx = e.target.dataset.index;
-            const item = e.target.closest('.grid-item');
-            
-            if (item.classList.contains('expanded')) {
-                item.classList.remove('expanded');
-                e.target.textContent = '⛶';
-            } else {
-                document.querySelectorAll('.grid-item').forEach(g => {
-                    g.classList.remove('expanded');
-                    g.querySelector('.expand-btn').textContent = '⛶';
-                });
-                item.classList.add('expanded');
-                e.target.textContent = '◧';
-            }
-            
-            setTimeout(() => maps[idx].invalidateSize(), 100);
-        });
+    document.querySelector('.close-modal').addEventListener('click', () => {
+        document.getElementById('result-modal').style.display = 'none';
     });
 }
 
-function clearMaps() {
-    maps.forEach(map => {
+function clearAllMaps() {
+    ALGORITHMS.forEach(algo => {
+        const map = maps[algo];
         map.eachLayer(layer => {
-            if (layer instanceof L.Polyline || layer instanceof L.CircleMarker) {
+            if (layer instanceof L.Path || layer instanceof L.Marker || layer instanceof L.CircleMarker) {
                 map.removeLayer(layer);
             }
         });
-        map.setView([0, 0], 2);
+        document.getElementById(`meta-${getMetaId(algo)}`).textContent = '';
     });
-    
-    ['v', 'd', 't'].forEach(prefix => {
-        for (let i = 0; i < 4; i++) {
-            document.getElementById(`${prefix}-${i}`).textContent = '-';
-        }
-    });
-    
-    log('Maps cleared');
-    status('Maps cleared');
+    document.getElementById('btn-toggle-table').style.display = 'none';
+    setStatus('Maps cleared');
 }
 
-async function loadPreview() {
-    const inst = document.getElementById('preview-select').value;
-    if (!inst) return;
-    
-    log(`Loading preview: ${inst}`);
-    
+// --- NEW: Load Instance Preview ---
+async function loadInstancePreview() {
+    const instance = document.getElementById('instance-select').value;
+    if (!instance) return setStatus('Select an instance first', true);
+
+    setStatus('Loading map data...');
+    clearAllMaps(); // Clear previous data
+
     try {
-        const res = await fetch('/api/load_preview', {
+        const res = await fetch('/api/load_instance', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instance: inst })
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ instance: instance })
         });
         
+        if (!res.ok) throw new Error('API Error');
         const data = await res.json();
-        
-        maps.forEach(map => {
-            map.eachLayer(layer => {
-                if (layer instanceof L.CircleMarker) map.removeLayer(layer);
-            });
-            
-            const depot = [data.depot.lat, data.depot.lng];
-            const customers = data.customers.map(c => [c.lat, c.lng]);
-            
-            map.fitBounds([depot, ...customers], { padding: [40, 40] });
-            
-            L.circleMarker(depot, {
-                radius: 8,
-                fillColor: '#2563eb',
-                color: '#ffffff',
-                weight: 2,
-                fillOpacity: 1
-            }).addTo(map).bindPopup('<b>Depot</b>');
-            
-            customers.forEach((c, i) => {
-                L.circleMarker(c, {
-                    radius: 4,
-                    fillColor: '#94a3b8',
-                    color: '#ffffff',
-                    weight: 1,
-                    fillOpacity: 1
-                }).addTo(map).bindPopup(`Customer ${i + 1}`);
-            });
+
+        // Draw dots on ALL maps
+        ALGORITHMS.forEach(algo => {
+            const map = maps[algo];
+            drawNodes(map, data.depot, data.customers);
         });
-        
-        log(`Preview loaded: ${data.customers.length} customers`);
-        status(`Loaded ${inst.toUpperCase()}`);
-    } catch (err) {
-        log(`Preview error: ${err.message}`);
+
+        setStatus(`Loaded ${instance} (${data.customers.length} customers)`);
+    } catch (e) {
+        setStatus('Error loading instance: ' + e.message, true);
     }
 }
 
-async function runComparison() {
-    const select = document.getElementById('instance-select');
-    const selected = Array.from(select.selectedOptions).map(o => o.value);
-    const algos = Array.from(document.querySelectorAll('.checkbox-label input:checked')).map(c => c.value);
-    const maxVeh = parseInt(document.getElementById('max-vehicles').value) || 15;
-    
-    if (!selected.length) {
-        status('Select instances', 'error');
-        return;
-    }
-    
-    if (!algos.length) {
-        status('Select algorithms', 'error');
-        return;
-    }
-    
-    log(`Starting: ${selected.length} instances × ${algos.length} algorithms`);
-    status('Running comparison...');
-    document.getElementById('run-btn').disabled = true;
-    
+function drawNodes(map, depot, customers) {
+    const depotPos = transformCoords(depot.lat, depot.lng);
+    const bounds = L.latLngBounds([depotPos]);
+
+    // Draw Depot
+    L.circleMarker(depotPos, {
+        radius: 6, color: '#000', fillColor: '#000', fillOpacity: 1
+    }).addTo(map).bindPopup('<b>DEPOT</b>');
+
+    // Draw Customers
+    customers.forEach(c => {
+        const pos = transformCoords(c.lat, c.lng);
+        bounds.extend(pos);
+        L.circleMarker(pos, {
+            radius: 3, color: '#888', fillColor: '#fff', weight: 1, fillOpacity: 1
+        }).addTo(map).bindPopup(`Cust: ${c.id}<br>Demand: ${c.demand}`);
+    });
+
+    map.fitBounds(bounds, { padding: [30, 30] });
+}
+
+// --- Run Benchmark ---
+async function runBenchmark() {
+    const instance = document.getElementById('instance-select').value;
+    const maxVehicles = parseInt(document.getElementById('max-vehicles').value);
+    const selectedAlgos = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+
+    if (!instance) return setStatus('Please select an instance', true);
+    if (!selectedAlgos.length) return setStatus('Select algorithms', true);
+
+    const btn = document.getElementById('btn-run');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> RUNNING...';
+    setStatus('Solving...');
+
     try {
         const res = await fetch('/api/run_comparison', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                instances: selected,
-                algorithms: algos,
-                max_vehicles: maxVeh
+                instance: instance,
+                algorithms: selectedAlgos,
+                max_vehicles: maxVehicles
             })
         });
+
+        const data = await res.json();
+        currentSolutionData = data.solutions;
         
-        currentResults = await res.json();
-        displayResults();
-        log(`Completed: ${currentResults.solutions.length} solutions`);
-        status('Comparison complete', 'success');
-    } catch (err) {
-        log(`Error: ${err.message}`);
-        status('Comparison failed', 'error');
+        // Clear maps to redraw solutions (or keep dots and just draw lines? Let's redraw for clean layers)
+        clearAllMaps();
+
+        data.solutions.forEach(sol => {
+            if (sol.error) {
+                console.error(sol.algorithm, sol.error);
+                return;
+            }
+            drawSolution(sol);
+        });
+
+        document.getElementById('btn-toggle-table').style.display = 'block';
+        setStatus('Benchmark Completed');
+    } catch (e) {
+        setStatus('Execution failed: ' + e.message, true);
     } finally {
-        document.getElementById('run-btn').disabled = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-play"></i> RUN BENCHMARK';
     }
 }
 
-function displayResults() {
-    clearMaps();
-    
-    const algoMap = {
-        'ALNS': 0,
-        'DQN': 1,
-        'DQN+ALNS': 2,
-        'OR-TOOLS': 3
-    };
-    
-    currentResults.solutions.forEach(sol => {
-        const idx = algoMap[sol.algorithm];
-        if (idx !== undefined) visualize(sol, idx);
-    });
-}
+function drawSolution(sol) {
+    const map = maps[sol.algorithm];
+    if (!map) return;
 
-function visualize(sol, idx) {
-    const map = maps[idx];
-    
-    const depot = [sol.depot.lat, sol.depot.lng];
-    const allPts = [depot, ...sol.routes.flatMap(r => r.nodes.map(n => [n.lat, n.lng]))];
-    
-    map.fitBounds(allPts, { padding: [30, 30] });
-    
-    L.circleMarker(depot, {
-        radius: 8,
-        fillColor: '#2563eb',
-        color: '#ffffff',
-        weight: 2,
-        fillOpacity: 1
-    }).addTo(map).bindPopup('<b>Depot</b>');
-    
-    const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
-    
+    const depotPos = transformCoords(sol.depot.lat, sol.depot.lng);
+    const bounds = L.latLngBounds([depotPos]);
+
+    // Redraw Depot
+    L.circleMarker(depotPos, { radius: 6, color: '#000', fillColor: '#000', fillOpacity: 1 }).addTo(map);
+
+    const colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#f032e6'];
+
     sol.routes.forEach((route, i) => {
         const color = colors[i % colors.length];
-        const pts = [depot, ...route.nodes.map(n => [n.lat, n.lng]), depot];
-        
-        L.polyline(pts, {
-            color: color,
-            weight: 3,
-            opacity: 0.7
-        }).addTo(map);
-        
-        route.nodes.forEach((node, j) => {
-            L.circleMarker([node.lat, node.lng], {
-                radius: 5,
-                fillColor: '#ffffff',
-                color: color,
-                weight: 2,
-                fillOpacity: 1
-            }).addTo(map).bindPopup(`Route ${i + 1}<br>Stop ${j + 1}`);
+        const latlngs = [depotPos]; // Start at depot
+
+        route.nodes.forEach(node => {
+            const pos = transformCoords(node.lat, node.lng);
+            latlngs.push(pos);
+            bounds.extend(pos);
+            
+            // Draw Customer Node (Colored)
+            L.circleMarker(pos, {
+                radius: 4, color: color, fillColor: '#fff', weight: 2, fillOpacity: 1
+            }).addTo(map).bindPopup(`Cust: ${node.id}`);
         });
+
+        latlngs.push(depotPos); // Return to depot
+
+        // Draw Route
+        L.polyline(latlngs, { color: color, weight: 2.5, opacity: 0.8 }).addTo(map);
     });
-    
-    document.getElementById(`v-${idx}`).textContent = sol.vehicles;
-    document.getElementById(`d-${idx}`).textContent = sol.distance.toFixed(1);
-    document.getElementById(`t-${idx}`).textContent = sol.time.toFixed(2) + 's';
+
+    map.fitBounds(bounds, { padding: [20, 20] });
+
+    // Update Meta Stats
+    const metaId = getMetaId(sol.algorithm);
+    const el = document.getElementById(`meta-${metaId}`);
+    if(el) el.innerHTML = `<i class="fa-solid fa-truck"></i> ${sol.vehicles} | <i class="fa-solid fa-road"></i> ${sol.distance.toFixed(1)} | <i class="fa-regular fa-clock"></i> ${sol.time.toFixed(2)}s`;
 }
 
-function showTable() {
-    if (!currentResults) {
-        status('No results yet', 'error');
-        return;
-    }
+function getMetaId(algoName) {
+    return algoName.toLowerCase().replace('dqn+alns', 'hybrid').replace('or-tools', 'ortools');
+}
+
+function setStatus(msg, isError = false) {
+    const el = document.getElementById('status-bar');
+    el.textContent = msg;
+    el.style.color = isError ? '#d32f2f' : '#666';
+}
+
+function renderTable() {
+    const container = document.getElementById('table-container');
+    let html = `<table><thead><tr><th>Algorithm</th><th>Vehicles</th><th>Distance</th><th>Time (s)</th></tr></thead><tbody>`;
     
-    let html = '<table><thead><tr>';
-    html += '<th>Instance</th><th>Algorithm</th><th>Vehicles</th><th>Distance</th><th>Time (s)</th>';
-    html += '</tr></thead><tbody>';
-    
-    currentResults.table.forEach(row => {
+    currentSolutionData.forEach(row => {
+        if(row.error) {
+            html += `<tr><td>${row.algorithm}</td><td colspan="3" style="color:red">Failed: ${row.error}</td></tr>`;
+            return;
+        }
         html += `<tr>
-            <td>${row.instance}</td>
-            <td>${row.algorithm}</td>
+            <td><strong>${row.algorithm}</strong></td>
             <td>${row.vehicles}</td>
             <td>${row.distance.toFixed(2)}</td>
-            <td>${row.time.toFixed(2)}</td>
+            <td>${row.time.toFixed(3)}</td>
         </tr>`;
     });
-    
     html += '</tbody></table>';
-    document.getElementById('table-wrapper').innerHTML = html;
-    document.getElementById('table-modal').classList.add('active');
+    container.innerHTML = html;
 }

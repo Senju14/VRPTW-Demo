@@ -1,284 +1,296 @@
-const { useState, useEffect } = React;
+let maps = [];
+let instances = [];
+let currentResults = null;
+let logs = [];
 
-const PlayIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-  </svg>
-);
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadInstances();
+    initMaps();
+    setupListeners();
+    log('System ready');
+});
 
-const MaximizeIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-  </svg>
-);
-
-const MinimizeIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
-  </svg>
-);
-
-const GridIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="3" width="7" height="7"></rect>
-    <rect x="14" y="3" width="7" height="7"></rect>
-    <rect x="14" y="14" width="7" height="7"></rect>
-    <rect x="3" y="14" width="7" height="7"></rect>
-  </svg>
-);
-
-function App() {
-  const [instances, setInstances] = useState([]);
-  const [selectedInstances, setSelectedInstances] = useState(new Set());
-  const [algorithms, setAlgorithms] = useState({
-    alns: true,
-    dqn: true,
-    dqn_alns: true,
-    ortools: true
-  });
-  const [maxVehicles, setMaxVehicles] = useState('15');
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [showTable, setShowTable] = useState(false);
-  const [expanded, setExpanded] = useState({});
-
-  useEffect(() => {
-    fetch('/api/instances')
-      .then(res => res.json())
-      .then(data => setInstances(data));
-  }, []);
-
-  const toggleInstance = (inst) => {
-    const newSet = new Set(selectedInstances);
-    if (newSet.has(inst)) newSet.delete(inst);
-    else newSet.add(inst);
-    setSelectedInstances(newSet);
-  };
-
-  const handleRun = async () => {
-    if (selectedInstances.size === 0) return;
+function log(msg) {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    logs.push(`[${time}] ${msg}`);
+    if (logs.length > 100) logs.shift();
     
-    setLoading(true);
-    const selectedAlgos = Object.keys(algorithms).filter(k => algorithms[k]);
-    
-    try {
-      const response = await fetch('/api/run_comparison', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instances: Array.from(selectedInstances),
-          algorithms: selectedAlgos,
-          max_vehicles: parseInt(maxVehicles) || 15
-        })
-      });
-      const data = await response.json();
-      setResults(data);
-    } catch (error) {
-      console.error('Error:', error);
-    }
-    setLoading(false);
-  };
-
-  const toggleExpand = (key) => {
-    setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  return (
-    <div className="min-h-screen bg-white text-black p-6">
-      <header className="mb-8 border-b-2 border-black pb-4">
-        <h1 className="text-3xl font-bold">VRPTW Solver Comparison</h1>
-      </header>
-
-      <div className="mb-6 space-y-4">
-        <div className="border-2 border-black p-4">
-          <h2 className="font-bold mb-3">Select Instances</h2>
-          <div className="grid grid-cols-8 gap-2">
-            {instances.map(inst => (
-              <label key={inst} className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedInstances.has(inst)}
-                  onChange={() => toggleInstance(inst)}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm">{inst.toUpperCase()}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="border-2 border-black p-4">
-            <h2 className="font-bold mb-3">Select Algorithms</h2>
-            <div className="space-y-2">
-              {Object.keys(algorithms).map(algo => (
-                <label key={algo} className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={algorithms[algo]}
-                    onChange={(e) => setAlgorithms({...algorithms, [algo]: e.target.checked})}
-                    className="w-4 h-4"
-                  />
-                  <span>{algo === 'ortools' ? 'OR-Tools' : algo.toUpperCase().replace('_', '+')}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-2 border-black p-4">
-            <h2 className="font-bold mb-3">Configuration</h2>
-            <label className="block mb-2">
-              <span className="text-sm font-medium">Max Vehicles</span>
-              <input
-                type="text"
-                value={maxVehicles}
-                onChange={(e) => setMaxVehicles(e.target.value.replace(/\D/g, ''))}
-                className="w-full border-2 border-black p-2 mt-1"
-                placeholder="15"
-              />
-            </label>
-            <button
-              onClick={handleRun}
-              disabled={loading || selectedInstances.size === 0}
-              className="w-full bg-black text-white p-2 flex items-center justify-center space-x-2 hover:bg-gray-800 disabled:bg-gray-400"
-            >
-              <PlayIcon />
-              <span>{loading ? 'Running...' : 'Run Comparison'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {results && (
-        <>
-          <div className="mb-4 flex justify-end">
-            <button
-              onClick={() => setShowTable(!showTable)}
-              className="border-2 border-black px-4 py-2 flex items-center space-x-2 hover:bg-gray-100"
-            >
-              <GridIcon />
-              <span>{showTable ? 'Hide Table' : 'Show Table'}</span>
-            </button>
-          </div>
-
-          {showTable && (
-            <div className="mb-6 border-2 border-black p-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-black">
-                    <th className="text-left p-2">Instance</th>
-                    <th className="text-left p-2">Algorithm</th>
-                    <th className="text-right p-2">Vehicles</th>
-                    <th className="text-right p-2">Distance</th>
-                    <th className="text-right p-2">Time (s)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.table.map((row, idx) => (
-                    <tr key={idx} className="border-b border-gray-300">
-                      <td className="p-2">{row.instance}</td>
-                      <td className="p-2">{row.algorithm}</td>
-                      <td className="p-2 text-right">{row.vehicles}</td>
-                      <td className="p-2 text-right">{row.distance.toFixed(2)}</td>
-                      <td className="p-2 text-right">{row.time.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            {results.solutions.map((sol, idx) => {
-              const key = `${sol.instance}_${sol.algorithm}`;
-              const isExpanded = expanded[key];
-              
-              return (
-                <div key={idx} className="border-2 border-black relative">
-                  <div className="flex items-center justify-between p-2 border-b-2 border-black bg-gray-50">
-                    <h3 className="font-bold text-sm">
-                      {sol.instance.toUpperCase()} - {sol.algorithm}
-                    </h3>
-                    <button
-                      onClick={() => toggleExpand(key)}
-                      className="hover:bg-gray-200 p-1"
-                    >
-                      {isExpanded ? <MinimizeIcon /> : <MaximizeIcon />}
-                    </button>
-                  </div>
-
-                  <svg 
-                    viewBox="0 0 600 400" 
-                    className={`w-full transition-all ${isExpanded ? 'h-96' : 'h-64'}`}
-                  >
-                    <rect x="0" y="0" width="600" height="400" fill="#f5f5f5" />
-                    
-                    <defs>
-                      <pattern id={`grid-${idx}`} width="20" height="20" patternUnits="userSpaceOnUse">
-                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#ddd" strokeWidth="0.5"/>
-                      </pattern>
-                    </defs>
-                    <rect width="600" height="400" fill={`url(#grid-${idx})`} />
-                    
-                    {sol.routes.map((route, ridx) => {
-                      const hue = (ridx * 360) / sol.routes.length;
-                      const color = `hsl(${hue}, 65%, 45%)`;
-                      const points = [sol.depot, ...route.nodes, sol.depot];
-                      
-                      return (
-                        <g key={ridx}>
-                          <polyline
-                            points={points.map(p => `${p.x},${p.y}`).join(' ')}
-                            fill="none"
-                            stroke={color}
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                          />
-                          {route.nodes.map((node, nidx) => (
-                            <circle
-                              key={nidx}
-                              cx={node.x}
-                              cy={node.y}
-                              r="5"
-                              fill="white"
-                              stroke={color}
-                              strokeWidth="2"
-                            />
-                          ))}
-                        </g>
-                      );
-                    })}
-                    
-                    <rect
-                      x={sol.depot.x - 8}
-                      y={sol.depot.y - 8}
-                      width="16"
-                      height="16"
-                      fill="#000"
-                      stroke="white"
-                      strokeWidth="2"
-                    />
-                  </svg>
-
-                  <div className="p-2 border-t-2 border-black bg-gray-50 text-xs grid grid-cols-3 gap-2">
-                    <div>
-                      <span className="font-medium">V:</span> {sol.vehicles}
-                    </div>
-                    <div>
-                      <span className="font-medium">D:</span> {sol.distance.toFixed(1)}
-                    </div>
-                    <div>
-                      <span className="font-medium">T:</span> {sol.time.toFixed(2)}s
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
+    const output = document.getElementById('log-output');
+    output.innerHTML = logs.map(l => `<div class="log-entry">${l}</div>`).join('');
+    output.scrollTop = output.scrollHeight;
 }
 
-ReactDOM.render(<App />, document.getElementById('root'));
+function status(msg, type = 'info') {
+    const bar = document.getElementById('status-bar');
+    bar.textContent = msg;
+    bar.style.color = type === 'error' ? 'var(--error)' : 
+                      type === 'success' ? 'var(--success)' : 'var(--text)';
+}
+
+async function loadInstances() {
+    try {
+        log('Loading instances...');
+        const res = await fetch('/api/instances');
+        instances = await res.json();
+        
+        const select = document.getElementById('instance-select');
+        const preview = document.getElementById('preview-select');
+        
+        const options = instances.map(i => `<option value="${i}">${i.toUpperCase()}</option>`).join('');
+        select.innerHTML = options;
+        preview.innerHTML = '<option value="">Choose...</option>' + options;
+        
+        log(`Loaded ${instances.length} instances`);
+    } catch (err) {
+        log(`Error: ${err.message}`);
+        status('Failed to load instances', 'error');
+    }
+}
+
+function initMaps() {
+    log('Initializing maps...');
+    for (let i = 0; i < 4; i++) {
+        const map = L.map(`map-${i}`, {
+            center: [0, 0],
+            zoom: 13,
+            zoomControl: true,
+            attributionControl: false
+        });
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+        
+        maps.push(map);
+    }
+}
+
+function setupListeners() {
+    document.getElementById('run-btn').addEventListener('click', runComparison);
+    document.getElementById('clear-btn').addEventListener('click', clearMaps);
+    document.getElementById('preview-btn').addEventListener('click', loadPreview);
+    document.getElementById('show-table-btn').addEventListener('click', showTable);
+    document.getElementById('close-modal').addEventListener('click', () => {
+        document.getElementById('table-modal').classList.remove('active');
+    });
+    
+    document.querySelectorAll('.expand-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = e.target.dataset.index;
+            const item = e.target.closest('.grid-item');
+            
+            if (item.classList.contains('expanded')) {
+                item.classList.remove('expanded');
+                e.target.textContent = '⛶';
+            } else {
+                document.querySelectorAll('.grid-item').forEach(g => {
+                    g.classList.remove('expanded');
+                    g.querySelector('.expand-btn').textContent = '⛶';
+                });
+                item.classList.add('expanded');
+                e.target.textContent = '◧';
+            }
+            
+            setTimeout(() => maps[idx].invalidateSize(), 100);
+        });
+    });
+}
+
+function clearMaps() {
+    maps.forEach(map => {
+        map.eachLayer(layer => {
+            if (layer instanceof L.Polyline || layer instanceof L.CircleMarker) {
+                map.removeLayer(layer);
+            }
+        });
+        map.setView([0, 0], 2);
+    });
+    
+    ['v', 'd', 't'].forEach(prefix => {
+        for (let i = 0; i < 4; i++) {
+            document.getElementById(`${prefix}-${i}`).textContent = '-';
+        }
+    });
+    
+    log('Maps cleared');
+    status('Maps cleared');
+}
+
+async function loadPreview() {
+    const inst = document.getElementById('preview-select').value;
+    if (!inst) return;
+    
+    log(`Loading preview: ${inst}`);
+    
+    try {
+        const res = await fetch('/api/load_preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instance: inst })
+        });
+        
+        const data = await res.json();
+        
+        maps.forEach(map => {
+            map.eachLayer(layer => {
+                if (layer instanceof L.CircleMarker) map.removeLayer(layer);
+            });
+            
+            const depot = [data.depot.lat, data.depot.lng];
+            const customers = data.customers.map(c => [c.lat, c.lng]);
+            
+            map.fitBounds([depot, ...customers], { padding: [40, 40] });
+            
+            L.circleMarker(depot, {
+                radius: 8,
+                fillColor: '#2563eb',
+                color: '#ffffff',
+                weight: 2,
+                fillOpacity: 1
+            }).addTo(map).bindPopup('<b>Depot</b>');
+            
+            customers.forEach((c, i) => {
+                L.circleMarker(c, {
+                    radius: 4,
+                    fillColor: '#94a3b8',
+                    color: '#ffffff',
+                    weight: 1,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup(`Customer ${i + 1}`);
+            });
+        });
+        
+        log(`Preview loaded: ${data.customers.length} customers`);
+        status(`Loaded ${inst.toUpperCase()}`);
+    } catch (err) {
+        log(`Preview error: ${err.message}`);
+    }
+}
+
+async function runComparison() {
+    const select = document.getElementById('instance-select');
+    const selected = Array.from(select.selectedOptions).map(o => o.value);
+    const algos = Array.from(document.querySelectorAll('.checkbox-label input:checked')).map(c => c.value);
+    const maxVeh = parseInt(document.getElementById('max-vehicles').value) || 15;
+    
+    if (!selected.length) {
+        status('Select instances', 'error');
+        return;
+    }
+    
+    if (!algos.length) {
+        status('Select algorithms', 'error');
+        return;
+    }
+    
+    log(`Starting: ${selected.length} instances × ${algos.length} algorithms`);
+    status('Running comparison...');
+    document.getElementById('run-btn').disabled = true;
+    
+    try {
+        const res = await fetch('/api/run_comparison', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                instances: selected,
+                algorithms: algos,
+                max_vehicles: maxVeh
+            })
+        });
+        
+        currentResults = await res.json();
+        displayResults();
+        log(`Completed: ${currentResults.solutions.length} solutions`);
+        status('Comparison complete', 'success');
+    } catch (err) {
+        log(`Error: ${err.message}`);
+        status('Comparison failed', 'error');
+    } finally {
+        document.getElementById('run-btn').disabled = false;
+    }
+}
+
+function displayResults() {
+    clearMaps();
+    
+    const algoMap = {
+        'ALNS': 0,
+        'DQN': 1,
+        'DQN+ALNS': 2,
+        'OR-TOOLS': 3
+    };
+    
+    currentResults.solutions.forEach(sol => {
+        const idx = algoMap[sol.algorithm];
+        if (idx !== undefined) visualize(sol, idx);
+    });
+}
+
+function visualize(sol, idx) {
+    const map = maps[idx];
+    
+    const depot = [sol.depot.lat, sol.depot.lng];
+    const allPts = [depot, ...sol.routes.flatMap(r => r.nodes.map(n => [n.lat, n.lng]))];
+    
+    map.fitBounds(allPts, { padding: [30, 30] });
+    
+    L.circleMarker(depot, {
+        radius: 8,
+        fillColor: '#2563eb',
+        color: '#ffffff',
+        weight: 2,
+        fillOpacity: 1
+    }).addTo(map).bindPopup('<b>Depot</b>');
+    
+    const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
+    
+    sol.routes.forEach((route, i) => {
+        const color = colors[i % colors.length];
+        const pts = [depot, ...route.nodes.map(n => [n.lat, n.lng]), depot];
+        
+        L.polyline(pts, {
+            color: color,
+            weight: 3,
+            opacity: 0.7
+        }).addTo(map);
+        
+        route.nodes.forEach((node, j) => {
+            L.circleMarker([node.lat, node.lng], {
+                radius: 5,
+                fillColor: '#ffffff',
+                color: color,
+                weight: 2,
+                fillOpacity: 1
+            }).addTo(map).bindPopup(`Route ${i + 1}<br>Stop ${j + 1}`);
+        });
+    });
+    
+    document.getElementById(`v-${idx}`).textContent = sol.vehicles;
+    document.getElementById(`d-${idx}`).textContent = sol.distance.toFixed(1);
+    document.getElementById(`t-${idx}`).textContent = sol.time.toFixed(2) + 's';
+}
+
+function showTable() {
+    if (!currentResults) {
+        status('No results yet', 'error');
+        return;
+    }
+    
+    let html = '<table><thead><tr>';
+    html += '<th>Instance</th><th>Algorithm</th><th>Vehicles</th><th>Distance</th><th>Time (s)</th>';
+    html += '</tr></thead><tbody>';
+    
+    currentResults.table.forEach(row => {
+        html += `<tr>
+            <td>${row.instance}</td>
+            <td>${row.algorithm}</td>
+            <td>${row.vehicles}</td>
+            <td>${row.distance.toFixed(2)}</td>
+            <td>${row.time.toFixed(2)}</td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    document.getElementById('table-wrapper').innerHTML = html;
+    document.getElementById('table-modal').classList.add('active');
+}

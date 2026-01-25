@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VRPTW Solver</title>
+    <title>VRPTW Planner</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -14,124 +14,247 @@
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <div class="header-title">
-                <span class="material-icons">local_shipping</span>
-                <h1>VRPTW Solver</h1>
+            <div class="header-brand">
+                <span class="material-icons brand-icon">route</span>
+                <h1>VRPTW Planner</h1>
             </div>
-            <div class="header-subtitle">ALNS vs Hybrid DQN+ALNS</div>
+            
+            <!-- Loading Status -->
+            <div id="loading-bar" class="loading-bar" style="display:none;">
+                <span class="loading-spinner"></span>
+                <span class="loading-text">Processing...</span>
+            </div>
+            
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="benchmark">
+                    <span class="material-icons">science</span>
+                    Benchmark
+                </button>
+                <button class="nav-tab" data-tab="production">
+                    <span class="material-icons">local_shipping</span>
+                    Production
+                </button>
+                <button class="nav-tab" data-tab="history">
+                    <span class="material-icons">history</span>
+                    History
+                </button>
+            </nav>
         </header>
 
         <div class="main-layout">
-            <!-- Sidebar -->
-            <aside class="sidebar">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="material-icons">dataset</span>
-                        <span>Dataset</span>
+            <!-- ===== TAB: BENCHMARK ===== -->
+            <div id="tab-benchmark" class="tab-content active">
+                <aside class="sidebar">
+                    <!-- Solomon Dataset -->
+                    <div class="card card-blue">
+                        <div class="card-header">
+                            <span class="material-icons">folder_open</span>
+                            <span>Solomon Dataset</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">Instance</label>
+                                <div class="input-row">
+                                    <select id="instance-select" class="form-select">
+                                        <option value="">Loading...</option>
+                                    </select>
+                                    <button id="btn-load" class="btn btn-primary btn-icon" title="Load">
+                                        <span class="material-icons">map</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-content">
-                        <label class="input-label">Instance</label>
-                        <select id="instance-select" class="select-input">
-                            <option value="">Loading...</option>
-                        </select>
-                        <button id="btn-load" class="btn btn-outline">
-                            <span class="material-icons">map</span>
-                            Load Map
+
+                    <!-- Info -->
+                    <div class="card card-green" id="info-card" style="display:none;">
+                        <div class="card-header">
+                            <span class="material-icons">info</span>
+                            <span>Instance Info</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-grid">
+                                <span>Name</span><span id="info-name">-</span>
+                                <span>Customers</span><span id="info-customers">-</span>
+                                <span>Capacity</span><span id="info-capacity">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="material-icons">tune</span>
+                            <span>Settings</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">Max Vehicles</label>
+                                <input type="number" id="max-vehicles" class="form-input" value="25" min="1" max="50">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="action-group">
+                        <button id="btn-solve" class="btn btn-primary btn-block">
+                            <span class="material-icons">play_arrow</span>
+                            Run Comparison
+                        </button>
+                        <button id="btn-clear" class="btn btn-secondary btn-block">
+                            <span class="material-icons">refresh</span>
+                            Clear
                         </button>
                     </div>
-                </div>
 
-                <div class="card" id="info-card" style="display:none;">
-                    <div class="card-header">
-                        <span class="material-icons">info</span>
-                        <span>Instance Info</span>
-                    </div>
-                    <div class="card-content">
-                        <div class="info-row"><span>Name:</span><span id="info-name">-</span></div>
-                        <div class="info-row"><span>Customers:</span><span id="info-customers">-</span></div>
-                        <div class="info-row"><span>Capacity:</span><span id="info-capacity">-</span></div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <span class="material-icons">tune</span>
-                        <span>Settings</span>
-                    </div>
-                    <div class="card-content">
-                        <label class="input-label">Algorithms</label>
-                        <div class="checkbox-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" value="ALNS" checked>
-                                <span>ALNS (Baseline)</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" value="Hybrid" checked>
-                                <span>Hybrid DQN+ALNS</span>
-                            </label>
+                    <!-- Results -->
+                    <div class="card card-purple" id="results-card" style="display:none;">
+                        <div class="card-header">
+                            <span class="material-icons">analytics</span>
+                            <span>Results</span>
                         </div>
-                        <label class="input-label">Max Vehicles</label>
-                        <input type="number" id="max-vehicles" class="number-input" value="25" min="1" max="50">
+                        <div class="card-body" id="results-content"></div>
                     </div>
-                </div>
+                </aside>
 
-                <div class="action-btns">
-                    <button id="btn-solve" class="btn btn-primary">
-                        <span class="material-icons">play_arrow</span>
-                        Run Comparison
-                    </button>
-                    <button id="btn-clear" class="btn btn-outline">
-                        <span class="material-icons">refresh</span>
-                        Clear
-                    </button>
-                </div>
-
-                <div class="card" id="results-card" style="display:none;">
-                    <div class="card-header">
-                        <span class="material-icons">analytics</span>
-                        <span>Results</span>
+                <main class="content">
+                    <div class="map-grid">
+                        <div class="map-panel" id="panel-alns">
+                            <div class="map-header">
+                                <span class="map-title">ALNS (Baseline)</span>
+                                <span class="map-meta" id="meta-alns"></span>
+                            </div>
+                            <div id="map-alns" class="map-view"></div>
+                        </div>
+                        <div class="map-panel" id="panel-hybrid">
+                            <div class="map-header">
+                                <span class="map-title">Hybrid DQN+ALNS</span>
+                                <span class="map-meta" id="meta-hybrid"></span>
+                            </div>
+                            <div id="map-hybrid" class="map-view"></div>
+                        </div>
                     </div>
-                    <div class="card-content" id="results-content"></div>
-                </div>
+                </main>
+            </div>
 
-                <div class="card" id="history-card">
-                    <div class="card-header">
-                        <span class="material-icons">history</span>
-                        <span>History</span>
-                        <button id="btn-clear-history" class="btn-icon" title="Clear History">
-                            <span class="material-icons">delete_outline</span>
+            <!-- ===== TAB: PRODUCTION ===== -->
+            <div id="tab-production" class="tab-content">
+                <aside class="sidebar">
+                    <!-- Smart Paste -->
+                    <div class="card card-blue">
+                        <div class="card-header">
+                            <span class="material-icons">content_paste</span>
+                            <span>Smart Paste</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="paste-hint">
+                                Format: <code>Địa chỉ | Khối lượng | Giờ</code>
+                            </div>
+                            <textarea id="paste-area" class="paste-area">123 Nguyễn Văn Linh, Q7 | 20 | 8-12
+456 Nguyễn Thị Thập, Q7 | 15 | 9-17
+789 Lê Văn Lương, Q7 | 30 | 10-16
+101 Huỳnh Tấn Phát, Q7 | 10 | 8-12
+202 Phạm Hữu Lầu, Q7 | 25 | 14-18</textarea>
+                            <button id="btn-parse" class="btn btn-secondary btn-block">
+                                <span class="material-icons">auto_fix_high</span>
+                                Parse Data
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Customer List -->
+                    <div class="card card-green" id="cust-card" style="display:none;">
+                        <div class="card-header">
+                            <span class="material-icons">people</span>
+                            <span>Customers (<span id="cust-count">0</span>)</span>
+                        </div>
+                        <div class="card-body card-scroll">
+                            <div id="cust-list" class="cust-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Fleet Settings -->
+                    <div class="card card-orange">
+                        <div class="card-header">
+                            <span class="material-icons">local_shipping</span>
+                            <span>Fleet Settings</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label class="form-label">Capacity/Vehicle</label>
+                                    <input type="number" id="prod-capacity" class="form-input" value="100">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label class="form-label">Max Vehicles</label>
+                                    <input type="number" id="prod-vehicles" class="form-input" value="10">
+                                </div>
+                            </div>
+                            <div class="info-note">
+                                <span class="material-icons">info</span>
+                                1 Depot với nhiều xe (VRPTW)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="action-group">
+                        <button id="btn-add-mode" class="btn btn-secondary btn-block">
+                            <span class="material-icons">add_location</span>
+                            Click Map to Add
+                        </button>
+                        <button id="btn-plan" class="btn btn-primary btn-block">
+                            <span class="material-icons">route</span>
+                            Plan Routes
                         </button>
                     </div>
-                    <div class="card-content">
-                        <div id="history-list" class="history-list">
-                            <div class="history-empty">No runs yet</div>
+                </aside>
+
+                <main class="content">
+                    <div class="map-panel full">
+                        <div class="map-header">
+                            <span class="map-title">Route Planning - Quận 7, HCMC</span>
+                            <span class="map-meta" id="prod-meta">Click map or paste data</span>
                         </div>
+                        <div id="map-prod" class="map-view"></div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- ===== TAB: HISTORY ===== -->
+            <div id="tab-history" class="tab-content">
+                <div class="history-page">
+                    <div class="history-header">
+                        <h2>Execution History</h2>
+                        <button id="btn-clear-history" class="btn btn-secondary">
+                            <span class="material-icons">delete_sweep</span>
+                            Clear
+                        </button>
+                    </div>
+                    <div class="history-table-wrap">
+                        <table class="data-table" id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Instance</th>
+                                    <th>Winner</th>
+                                    <th>Vehicles</th>
+                                    <th>Distance</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-tbody"></tbody>
+                        </table>
+                        <div id="history-empty" class="empty-state">No history yet</div>
                     </div>
                 </div>
-
-                <div class="status-bar" id="status">Ready</div>
-            </aside>
-
-            <!-- Main Content -->
-            <main class="content">
-                <div class="map-grid">
-                    <div class="map-panel" data-algo="ALNS">
-                        <div class="map-title">
-                            <span>ALNS (Baseline)</span>
-                            <span class="map-meta" id="meta-alns"></span>
-                        </div>
-                        <div id="map-alns" class="map-container"></div>
-                    </div>
-                    <div class="map-panel" data-algo="Hybrid">
-                        <div class="map-title">
-                            <span>Hybrid DQN+ALNS</span>
-                            <span class="map-meta" id="meta-hybrid"></span>
-                        </div>
-                        <div id="map-hybrid" class="map-container"></div>
-                    </div>
-                </div>
-            </main>
+            </div>
         </div>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <span class="material-icons status-icon">info</span>
+            <span id="status-text">Ready</span>
+        </footer>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

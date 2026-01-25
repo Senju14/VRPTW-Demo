@@ -1,84 +1,177 @@
 /**
- * VRPTW Solver Frontend Application
+ * VRPTW Planner - Complete JavaScript with all fixes
+ * - Depot on land (Quận 7, không ở sông)
+ * - Click to add customers
+ * - Winner/loser borders
+ * - Loading indicator
+ * - Robust parsing
  */
 
 const API = {
     instances: '/api/instances',
     load: '/api/load',
-    solve: '/api/solve'
+    solve: '/api/solve',
+    parsePaste: '/api/parse_paste',
+    solveCustom: '/api/solve_custom'
 };
 
+// Quận 7, HCMC - trên đất, không ở sông
 const CONFIG = {
-    center: [10.762622, 106.660172],
+    center: [10.7340, 106.7220],  // Quận 7 - Phú Mỹ Hưng area
     scale: 0.0008,
-    colors: ['#1a73e8', '#ea4335', '#34a853', '#fbbc04', '#9334e6', '#e91e63', '#00bcd4']
+    colors: ['#1a73e8', '#ea4335', '#34a853', '#fbbc04', '#9334e6', '#e91e63', '#00bcd4', '#795548']
 };
 
 const STORAGE_KEY = 'vrptw_history';
 
+// State
 let maps = {};
-let solutionData = {};
+let prodMap = null;
+let currentData = null;
+let prodCustomers = [];
+let lastProdSolution = null;
+let isAddMode = false;
+let depotMarker = null;
 
-// Coordinate transform
-function toLatLng(x, y) {
-    return [
-        CONFIG.center[0] + (x - 50) * CONFIG.scale,
-        CONFIG.center[1] + (y - 50) * CONFIG.scale
-    ];
-}
-
-// Initialize
+// ===== INIT =====
 document.addEventListener('DOMContentLoaded', async () => {
+    initTabs();
     initMaps();
     await loadInstances();
     setupEvents();
     loadHistory();
 });
 
-function initMaps() {
-    ['ALNS', 'Hybrid'].forEach(algo => {
-        const id = `map-${algo.toLowerCase()}`;
-        const el = document.getElementById(id);
-        if (!el) return;
+// ===== LOADING INDICATOR =====
+function showLoading(text = 'Processing...') {
+    const bar = document.getElementById('loading-bar');
+    bar.querySelector('.loading-text').textContent = text;
+    bar.style.display = 'flex';
+}
 
-        const map = L.map(id, { zoomControl: false }).setView(CONFIG.center, 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '', maxZoom: 19
-        }).addTo(map);
+function hideLoading() {
+    document.getElementById('loading-bar').style.display = 'none';
+}
 
-        maps[algo] = map;
+// ===== TABS =====
+function initTabs() {
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tab;
+
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            tab.classList.add('active');
+            document.getElementById(`tab-${target}`).classList.add('active');
+
+            setTimeout(() => {
+                if (target === 'benchmark') {
+                    Object.values(maps).forEach(m => m.invalidateSize());
+                } else if (target === 'production' && prodMap) {
+                    prodMap.invalidateSize();
+                }
+            }, 100);
+        });
     });
 }
 
+// ===== MAPS =====
+function initMaps() {
+    // Benchmark maps - offset để tránh sông
+    ['ALNS', 'Hybrid'].forEach(algo => {
+        const id = `map-${algo.toLowerCase()}`;
+        const el = document.getElementById(id);
+        if (el) maps[algo] = createMap(id);
+    });
+
+    // Production map
+    const prodEl = document.getElementById('map-prod');
+    if (prodEl) {
+        prodMap = createMap('map-prod');
+
+        // Depot marker - draggable
+        depotMarker = L.marker(CONFIG.center, {
+            draggable: true,
+            icon: L.divIcon({
+                className: 'depot-icon',
+                html: '<span class="material-icons" style="font-size:28px;color:#202124;">warehouse</span>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 28]
+            })
+        }).addTo(prodMap).bindPopup('<b>Depot</b><br>Kéo để di chuyển');
+
+        // Click to add
+        prodMap.on('click', onMapClick);
+    }
+}
+
+function createMap(id) {
+    const map = L.map(id).setView(CONFIG.center, 14);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19
+    }).addTo(map);
+    return map;
+}
+
+// Solomon coords -> LatLng (offset để tránh sông)
+function toLatLng(x, y) {
+    return [
+        CONFIG.center[0] + (x - 50) * CONFIG.scale * 0.8,
+        CONFIG.center[1] + (y - 50) * CONFIG.scale * 0.8 + 0.01  // Shift east slightly
+    ];
+}
+
+// ===== CLICK TO ADD =====
+function onMapClick(e) {
+    if (!isAddMode) return;
+
+    const id = prodCustomers.length + 1;
+    const customer = {
+        id,
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        address: `Customer ${id}`,
+        demand: 10,
+        ready_time: 0,
+        due_time: 1000,
+        service_time: 10
+    };
+
+    prodCustomers.push(customer);
+
+    L.circleMarker([customer.lat, customer.lng], {
+        radius: 8,
+        color: '#1a73e8',
+        fillColor: '#fff',
+        fillOpacity: 1,
+        weight: 2
+    }).addTo(prodMap).bindPopup(`<b>${customer.address}</b><br>Demand: ${customer.demand}`);
+
+    renderCustomerList();
+    setStatus(`Added customer ${id}`);
+}
+
+// ===== BENCHMARK =====
 async function loadInstances() {
     try {
         const res = await fetch(API.instances);
         const list = await res.json();
-
-        const select = document.getElementById('instance-select');
-        select.innerHTML = list.map(name =>
-            `<option value="${name}">${name}</option>`
-        ).join('');
-
+        document.getElementById('instance-select').innerHTML =
+            list.map(n => `<option value="${n}">${n}</option>`).join('');
         setStatus('Ready');
     } catch (e) {
-        setStatus('Failed to load instances', true);
+        setStatus('Load failed', true);
     }
-}
-
-function setupEvents() {
-    document.getElementById('btn-load').addEventListener('click', loadInstance);
-    document.getElementById('btn-solve').addEventListener('click', solve);
-    document.getElementById('btn-clear').addEventListener('click', clearMaps);
-    document.getElementById('btn-clear-history').addEventListener('click', clearHistory);
 }
 
 async function loadInstance() {
     const instance = document.getElementById('instance-select').value;
-    if (!instance) return setStatus('Select an instance', true);
+    if (!instance) return setStatus('Select instance', true);
 
-    setStatus('Loading...');
-    clearMaps();
+    showLoading('Loading instance...');
+    clearBenchmarkMaps();
 
     try {
         const res = await fetch(API.load, {
@@ -86,161 +179,81 @@ async function loadInstance() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ instance })
         });
-        const data = await res.json();
 
-        // Update info card
-        const infoCard = document.getElementById('info-card');
-        infoCard.style.display = 'block';
+        currentData = await res.json();
+        currentData.instance = instance;
+
+        document.getElementById('info-card').style.display = 'block';
         document.getElementById('info-name').textContent = instance;
-        document.getElementById('info-customers').textContent = data.customers.length;
-        document.getElementById('info-capacity').textContent = data.capacity;
+        document.getElementById('info-customers').textContent = currentData.customers.length;
+        document.getElementById('info-capacity').textContent = currentData.capacity;
 
-        // Draw on both maps
-        Object.keys(maps).forEach(algo => {
-            drawNodes(maps[algo], data.depot, data.customers);
-        });
-
+        Object.values(maps).forEach(map => drawNodes(map, currentData));
         setStatus(`Loaded ${instance}`);
     } catch (e) {
         setStatus('Error: ' + e.message, true);
+    } finally {
+        hideLoading();
     }
 }
 
-function drawNodes(map, depot, customers) {
-    const depotPos = toLatLng(depot.lat, depot.lng);
-    const bounds = L.latLngBounds([depotPos]);
+async function solveBenchmark() {
+    if (!currentData) return setStatus('Load data first', true);
 
-    // Depot
-    L.circleMarker(depotPos, {
-        radius: 8, color: '#202124', fillColor: '#202124', fillOpacity: 1, weight: 2
-    }).addTo(map).bindPopup('<b>Depot</b>');
+    const maxVehicles = parseInt(document.getElementById('max-vehicles').value) || 25;
 
-    // Customers
-    customers.forEach(c => {
-        const pos = toLatLng(c.lat, c.lng);
-        bounds.extend(pos);
-        L.circleMarker(pos, {
-            radius: 4, color: '#5f6368', fillColor: '#ffffff', fillOpacity: 1, weight: 1.5
-        }).addTo(map);
-    });
-
-    map.fitBounds(bounds, { padding: [30, 30] });
-}
-
-async function solve() {
-    const instance = document.getElementById('instance-select').value;
-    const maxVehicles = parseInt(document.getElementById('max-vehicles').value);
-    const algorithms = Array.from(document.querySelectorAll('input[type="checkbox"]:checked'))
-        .map(cb => cb.value);
-
-    if (!instance) return setStatus('Select an instance', true);
-    if (!algorithms.length) return setStatus('Select at least one algorithm', true);
-
-    const btn = document.getElementById('btn-solve');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="material-icons">hourglass_empty</span> Running...';
-    setStatus('Solving...');
+    showLoading('Running ALNS + Hybrid...');
 
     try {
         const res = await fetch(API.solve, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instance, algorithms, max_vehicles: maxVehicles })
+            body: JSON.stringify({
+                instance: currentData.instance,
+                algorithms: ['ALNS', 'Hybrid'],
+                max_vehicles: maxVehicles
+            })
         });
+
         const data = await res.json();
 
-        solutionData = {};
-        clearMaps();
-        document.getElementById('info-card').style.display = 'block';
+        // Show results
+        document.getElementById('results-card').style.display = 'block';
+        document.getElementById('results-content').innerHTML = buildResultsTable(data.solutions);
+
+        // Draw solutions and set winner/loser
+        const alns = data.solutions.find(s => s.algorithm === 'ALNS');
+        const hybrid = data.solutions.find(s => s.algorithm === 'Hybrid');
+
+        let winner = null;
+        if (alns && hybrid && !alns.error && !hybrid.error) {
+            winner = hybrid.distance <= alns.distance ? 'Hybrid' : 'ALNS';
+        }
 
         data.solutions.forEach(sol => {
-            solutionData[sol.algorithm] = sol;
-            if (!sol.error) {
-                drawSolution(sol);
+            if (!sol.error && maps[sol.algorithm]) {
+                drawSolution(maps[sol.algorithm], sol);
+                updateMeta(sol.algorithm, sol);
+
+                // Set winner/loser border
+                const panel = document.getElementById(`panel-${sol.algorithm.toLowerCase()}`);
+                panel.classList.remove('winner', 'loser');
+                if (winner) {
+                    panel.classList.add(sol.algorithm === winner ? 'winner' : 'loser');
+                }
             }
         });
 
-        showResults(data.solutions);
-        saveToHistory(instance, data.solutions);
+        saveToHistory(currentData.instance, data.solutions);
         setStatus('Complete');
     } catch (e) {
         setStatus('Error: ' + e.message, true);
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="material-icons">play_arrow</span> Run Comparison';
+        hideLoading();
     }
 }
 
-function drawSolution(sol) {
-    const map = maps[sol.algorithm];
-    if (!map || !sol.depot) return;
-
-    const depotPos = toLatLng(sol.depot.lat, sol.depot.lng);
-    const bounds = L.latLngBounds([depotPos]);
-
-    // Depot
-    L.circleMarker(depotPos, {
-        radius: 8, color: '#202124', fillColor: '#202124', fillOpacity: 1, weight: 2
-    }).addTo(map);
-
-    // Routes
-    sol.routes.forEach((route, i) => {
-        const color = CONFIG.colors[i % CONFIG.colors.length];
-        const latlngs = [depotPos];
-
-        route.nodes.forEach(node => {
-            const pos = toLatLng(node.lat, node.lng);
-            latlngs.push(pos);
-            bounds.extend(pos);
-
-            L.circleMarker(pos, {
-                radius: 5, color: color, fillColor: '#ffffff', fillOpacity: 1, weight: 2
-            }).addTo(map);
-        });
-
-        latlngs.push(depotPos);
-        L.polyline(latlngs, { color, weight: 2.5, opacity: 0.8 }).addTo(map);
-    });
-
-    map.fitBounds(bounds, { padding: [20, 20] });
-
-    // Update meta
-    const metaId = `meta-${sol.algorithm.toLowerCase()}`;
-    const metaEl = document.getElementById(metaId);
-    if (metaEl) {
-        metaEl.textContent = `${sol.vehicles} vehicles | ${sol.distance.toFixed(1)} dist`;
-    }
-}
-
-function showResults(solutions) {
-    const card = document.getElementById('results-card');
-    const content = document.getElementById('results-content');
-    card.style.display = 'block';
-
-    content.innerHTML = buildResultsTable(solutions);
-}
-
-function buildResultsTable(solutions) {
-    let html = '<table class="results-table"><tr><th>Algorithm</th><th>Vehicles</th><th>Distance</th><th>Time</th></tr>';
-
-    solutions.forEach(sol => {
-        if (sol.error) {
-            html += `<tr><td>${sol.algorithm}</td><td colspan="3" style="color:#d93025">${sol.error}</td></tr>`;
-        } else {
-            html += `<tr>
-                <td>${sol.algorithm}</td>
-                <td>${sol.vehicles}</td>
-                <td>${sol.distance.toFixed(2)}</td>
-                <td>${sol.time.toFixed(2)}s</td>
-            </tr>`;
-        }
-    });
-
-    html += '</table>';
-    return html;
-}
-
-function clearMaps() {
+function clearBenchmarkMaps() {
     Object.values(maps).forEach(map => {
         map.eachLayer(layer => {
             if (layer instanceof L.Path || layer instanceof L.CircleMarker) {
@@ -249,102 +262,334 @@ function clearMaps() {
         });
     });
 
+    // Clear winner/loser classes
+    document.getElementById('panel-alns').classList.remove('winner', 'loser');
+    document.getElementById('panel-hybrid').classList.remove('winner', 'loser');
+
+    document.getElementById('results-card').style.display = 'none';
     document.getElementById('meta-alns').textContent = '';
     document.getElementById('meta-hybrid').textContent = '';
-    document.getElementById('results-card').style.display = 'none';
-    solutionData = {};
 }
 
-function setStatus(msg, isError = false) {
-    const el = document.getElementById('status');
-    el.textContent = msg;
-    el.className = isError ? 'status-bar error' : 'status-bar';
-}
+// ===== PRODUCTION =====
+async function parsePaste() {
+    const text = document.getElementById('paste-area').value;
+    if (!text.trim()) return setStatus('Enter data', true);
 
-// History functions
-function getHistory() {
+    showLoading('Parsing data...');
+
     try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    } catch {
-        return [];
+        const res = await fetch(API.parsePaste, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        });
+
+        const data = await res.json();
+
+        // Distribute customers around depot (Quận 7 area)
+        const depotPos = depotMarker.getLatLng();
+        prodCustomers = data.customers.map((c, i) => {
+            const angle = (i / data.customers.length) * 2 * Math.PI;
+            const radius = 0.005 + Math.random() * 0.008;
+            return {
+                ...c,
+                lat: depotPos.lat + Math.cos(angle) * radius,
+                lng: depotPos.lng + Math.sin(angle) * radius
+            };
+        });
+
+        renderCustomerList();
+        drawProdCustomers();
+        setStatus(`Parsed ${prodCustomers.length} customers`);
+    } catch (e) {
+        setStatus('Error: ' + e.message, true);
+    } finally {
+        hideLoading();
     }
 }
 
-function saveHistory(history) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-}
+function renderCustomerList() {
+    const card = document.getElementById('cust-card');
+    const list = document.getElementById('cust-list');
+    const count = document.getElementById('cust-count');
 
-function saveToHistory(instance, solutions) {
-    const history = getHistory();
+    count.textContent = prodCustomers.length;
 
-    const alns = solutions.find(s => s.algorithm === 'ALNS');
-    const hybrid = solutions.find(s => s.algorithm === 'Hybrid');
-
-    const entry = {
-        id: Date.now(),
-        instance,
-        timestamp: new Date().toLocaleString(),
-        solutions,
-        winner: (hybrid && alns && !hybrid.error && !alns.error)
-            ? (hybrid.distance < alns.distance ? 'Hybrid' : 'ALNS')
-            : null
-    };
-
-    history.unshift(entry);
-
-    // Keep only last 20 entries
-    if (history.length > 20) {
-        history.pop();
-    }
-
-    saveHistory(history);
-    loadHistory();
-}
-
-function loadHistory() {
-    const history = getHistory();
-    const container = document.getElementById('history-list');
-
-    if (history.length === 0) {
-        container.innerHTML = '<div class="history-empty">No runs yet</div>';
+    if (!prodCustomers.length) {
+        card.style.display = 'none';
         return;
     }
 
-    container.innerHTML = history.map(entry => {
-        const winClass = entry.winner === 'Hybrid' ? 'winner' : (entry.winner === 'ALNS' ? 'loser' : '');
-        return `
-            <div class="history-item ${winClass}" data-id="${entry.id}">
-                <div class="history-item-title">${entry.instance}</div>
-                <div class="history-item-meta">${entry.timestamp}</div>
-            </div>
-        `;
-    }).join('');
+    card.style.display = 'block';
+    list.innerHTML = prodCustomers.map(c => `
+        <div class="cust-item">
+            <span>#${c.id} ${(c.address || '').substring(0, 18)}...</span>
+            <span>${c.demand || 10}kg</span>
+        </div>
+    `).join('');
+}
 
-    // Add click handlers
-    container.querySelectorAll('.history-item').forEach(item => {
-        item.addEventListener('click', () => showHistoryEntry(parseInt(item.dataset.id)));
+function drawProdCustomers() {
+    // Clear markers except depot
+    prodMap.eachLayer(layer => {
+        if (layer instanceof L.CircleMarker || layer instanceof L.Polyline) {
+            prodMap.removeLayer(layer);
+        }
+    });
+
+    const depotPos = depotMarker.getLatLng();
+    const bounds = L.latLngBounds([[depotPos.lat, depotPos.lng]]);
+
+    prodCustomers.forEach(c => {
+        const pos = [c.lat, c.lng];
+        bounds.extend(pos);
+        L.circleMarker(pos, {
+            radius: 7,
+            color: '#1a73e8',
+            fillColor: '#fff',
+            fillOpacity: 1,
+            weight: 2
+        }).addTo(prodMap).bindPopup(`<b>${c.address || 'Customer ' + c.id}</b><br>Demand: ${c.demand || 10}`);
+    });
+
+    prodMap.fitBounds(bounds, { padding: [50, 50] });
+}
+
+async function planRoutes() {
+    if (!prodCustomers.length) return setStatus('Parse or add customers first', true);
+
+    const capacity = parseFloat(document.getElementById('prod-capacity').value) || 100;
+    const maxVehicles = parseInt(document.getElementById('prod-vehicles').value) || 10;
+    const depotPos = depotMarker.getLatLng();
+
+    showLoading('Planning routes...');
+
+    try {
+        const res = await fetch(API.solveCustom, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                depot: { lat: depotPos.lat, lng: depotPos.lng },
+                customers: prodCustomers.map(c => ({
+                    id: c.id,
+                    lat: c.lat,
+                    lng: c.lng,
+                    demand: c.demand || 10,
+                    ready_time: c.ready_time || 0,
+                    due_time: c.due_time || 1000,
+                    service_time: c.service_time || 10
+                })),
+                capacity,
+                max_vehicles: maxVehicles,
+                algorithms: ['Hybrid']
+            })
+        });
+
+        const data = await res.json();
+        lastProdSolution = data.solutions[0];
+
+        if (lastProdSolution && !lastProdSolution.error) {
+            drawProdRoutes(lastProdSolution);
+            document.getElementById('prod-meta').textContent =
+                `${lastProdSolution.vehicles} vehicles • ${lastProdSolution.distance.toFixed(1)} dist`;
+
+            saveToHistory('Custom', data.solutions);
+        }
+
+        setStatus('Routes planned');
+    } catch (e) {
+        setStatus('Error: ' + e.message, true);
+    } finally {
+        hideLoading();
+    }
+}
+
+function drawProdRoutes(sol) {
+    // Clear routes only
+    prodMap.eachLayer(layer => {
+        if (layer instanceof L.Polyline) prodMap.removeLayer(layer);
+    });
+
+    const depotPos = depotMarker.getLatLng();
+
+    sol.routes.forEach((route, i) => {
+        const color = CONFIG.colors[i % CONFIG.colors.length];
+        const latlngs = [[depotPos.lat, depotPos.lng]];
+
+        route.nodes.forEach(n => {
+            latlngs.push([n.lat, n.lng]);
+        });
+
+        latlngs.push([depotPos.lat, depotPos.lng]);
+        L.polyline(latlngs, { color, weight: 3, opacity: 0.8 }).addTo(prodMap);
     });
 }
 
-function showHistoryEntry(id) {
-    const history = getHistory();
-    const entry = history.find(h => h.id === id);
+// ===== DRAWING =====
+function drawNodes(map, data) {
+    const depotPos = toLatLng(data.depot.lat, data.depot.lng);
+    const bounds = L.latLngBounds([depotPos]);
 
-    if (!entry) return;
+    L.circleMarker(depotPos, {
+        radius: 10, color: '#202124', fillColor: '#202124', fillOpacity: 1
+    }).addTo(map).bindPopup('<b>Depot</b>');
 
-    const card = document.getElementById('results-card');
-    const content = document.getElementById('results-content');
-    card.style.display = 'block';
+    data.customers.forEach(c => {
+        const pos = toLatLng(c.lat, c.lng);
+        bounds.extend(pos);
+        L.circleMarker(pos, {
+            radius: 5, color: '#5f6368', fillColor: '#fff', fillOpacity: 1
+        }).addTo(map);
+    });
 
-    content.innerHTML = `
-        <div style="margin-bottom: 8px; font-weight: 500;">${entry.instance} - ${entry.timestamp}</div>
-        ${buildResultsTable(entry.solutions)}
+    map.fitBounds(bounds, { padding: [30, 30] });
+}
+
+function drawSolution(map, sol) {
+    map.eachLayer(layer => {
+        if (layer instanceof L.Polyline) map.removeLayer(layer);
+    });
+
+    const depotPos = toLatLng(sol.depot.lat, sol.depot.lng);
+
+    sol.routes.forEach((route, i) => {
+        const color = CONFIG.colors[i % CONFIG.colors.length];
+        const latlngs = [depotPos];
+
+        route.nodes.forEach(n => {
+            latlngs.push(toLatLng(n.lat, n.lng));
+        });
+
+        latlngs.push(depotPos);
+        L.polyline(latlngs, { color, weight: 3, opacity: 0.8 }).addTo(map);
+    });
+}
+
+function updateMeta(algo, sol) {
+    const el = document.getElementById(`meta-${algo.toLowerCase()}`);
+    if (el) el.textContent = `${sol.vehicles} vehicles • ${sol.distance.toFixed(1)} dist`;
+}
+
+function buildResultsTable(sols) {
+    return `
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #ddd;">
+                <th style="text-align:left;padding:8px;">Algo</th>
+                <th style="text-align:right;padding:8px;">V</th>
+                <th style="text-align:right;padding:8px;">Dist</th>
+            </tr>
+            ${sols.map(s => `
+                <tr>
+                    <td style="padding:8px;">${s.algorithm}</td>
+                    <td style="text-align:right;padding:8px;">${s.error ? '-' : s.vehicles}</td>
+                    <td style="text-align:right;padding:8px;">${s.error ? 'Error' : s.distance.toFixed(1)}</td>
+                </tr>
+            `).join('')}
+        </table>
     `;
 }
 
+// ===== HISTORY =====
+function loadHistory() {
+    const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const tbody = document.getElementById('history-tbody');
+    const empty = document.getElementById('history-empty');
+    const table = document.getElementById('history-table');
+
+    if (!history.length) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        table.style.display = 'none';
+        return;
+    }
+
+    empty.style.display = 'none';
+    table.style.display = 'table';
+
+    tbody.innerHTML = history.map(h => {
+        const best = h.solutions.reduce((a, b) =>
+            ((a.distance || Infinity) < (b.distance || Infinity) ? a : b), h.solutions[0]);
+        const winnerClass = h.winner === 'Hybrid' ? 'winner-hybrid' : 'winner-alns';
+
+        return `
+            <tr>
+                <td>${h.timestamp}</td>
+                <td>${h.instance}</td>
+                <td class="${winnerClass}">${h.winner || '-'}</td>
+                <td>${best.vehicles || '-'}</td>
+                <td>${best.distance ? best.distance.toFixed(1) : '-'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function saveToHistory(instance, sols) {
+    const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+    const alns = sols.find(s => s.algorithm === 'ALNS');
+    const hybrid = sols.find(s => s.algorithm === 'Hybrid');
+
+    let winner = null;
+    if (alns && hybrid && !alns.error && !hybrid.error) {
+        winner = hybrid.distance <= alns.distance ? 'Hybrid' : 'ALNS';
+    } else if (hybrid && !hybrid.error) {
+        winner = 'Hybrid';
+    }
+
+    history.unshift({
+        id: Date.now(),
+        timestamp: new Date().toLocaleString('vi-VN'),
+        instance,
+        solutions: sols,
+        winner
+    });
+
+    if (history.length > 50) history.pop();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    loadHistory();
+}
+
 function clearHistory() {
-    if (confirm('Clear all history?')) {
+    if (confirm('Clear history?')) {
         localStorage.removeItem(STORAGE_KEY);
         loadHistory();
     }
+}
+
+// ===== UTILITIES =====
+function setStatus(msg, isError = false) {
+    const text = document.getElementById('status-text');
+    const icon = document.querySelector('.status-icon');
+    text.textContent = msg;
+    icon.style.color = isError ? '#ea4335' : '';
+}
+
+// ===== EVENTS =====
+function setupEvents() {
+    // Benchmark
+    document.getElementById('btn-load').addEventListener('click', loadInstance);
+    document.getElementById('btn-solve').addEventListener('click', solveBenchmark);
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        clearBenchmarkMaps();
+        document.getElementById('info-card').style.display = 'none';
+        setStatus('Cleared');
+    });
+
+    // Production
+    document.getElementById('btn-parse').addEventListener('click', parsePaste);
+    document.getElementById('btn-plan').addEventListener('click', planRoutes);
+
+    // Add mode toggle
+    document.getElementById('btn-add-mode').addEventListener('click', function () {
+        isAddMode = !isAddMode;
+        this.classList.toggle('active', isAddMode);
+        this.innerHTML = isAddMode
+            ? '<span class="material-icons">check</span> Adding Mode ON'
+            : '<span class="material-icons">add_location</span> Click Map to Add';
+        setStatus(isAddMode ? 'Click map to add customers' : 'Add mode off');
+    });
+
+    // History
+    document.getElementById('btn-clear-history').addEventListener('click', clearHistory);
 }

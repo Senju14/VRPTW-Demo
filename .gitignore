@@ -1,10 +1,37 @@
+# Python
 __pycache__/
-*.pyc
-.env
-.venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.manifest
+*.spec
+
+# Virtual environments
 venv/
-.idea/
+env/
+.venv/
+.env/
+
+# IDE
 .vscode/
+.idea/
 *.swp
-models/*.safetensors
-data/
+*.swo
+
+# Gradio
+.gradio/
+flagged/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+output/

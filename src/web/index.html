@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRPTW Solver</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <span class="material-icons">local_shipping</span>
+                <h1>VRPTW Solver</h1>
+            </div>
+            <div class="header-subtitle">ALNS vs Hybrid DQN+ALNS</div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="material-icons">dataset</span>
+                        <span>Dataset</span>
+                    </div>
+                    <div class="card-content">
+                        <label class="input-label">Instance</label>
+                        <select id="instance-select" class="select-input">
+                            <option value="">Loading...</option>
+                        </select>
+                        <button id="btn-load" class="btn btn-outline">
+                            <span class="material-icons">map</span>
+                            Load Map
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card" id="info-card" style="display:none;">
+                    <div class="card-header">
+                        <span class="material-icons">info</span>
+                        <span>Instance Info</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-row"><span>Name:</span><span id="info-name">-</span></div>
+                        <div class="info-row"><span>Customers:</span><span id="info-customers">-</span></div>
+                        <div class="info-row"><span>Capacity:</span><span id="info-capacity">-</span></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="material-icons">tune</span>
+                        <span>Settings</span>
+                    </div>
+                    <div class="card-content">
+                        <label class="input-label">Algorithms</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="ALNS" checked>
+                                <span>ALNS (Baseline)</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="Hybrid" checked>
+                                <span>Hybrid DQN+ALNS</span>
+                            </label>
+                        </div>
+                        <label class="input-label">Max Vehicles</label>
+                        <input type="number" id="max-vehicles" class="number-input" value="25" min="1" max="50">
+                    </div>
+                </div>
+
+                <div class="action-btns">
+                    <button id="btn-solve" class="btn btn-primary">
+                        <span class="material-icons">play_arrow</span>
+                        Run Comparison
+                    </button>
+                    <button id="btn-clear" class="btn btn-outline">
+                        <span class="material-icons">refresh</span>
+                        Clear
+                    </button>
+                </div>
+
+                <div class="card" id="results-card" style="display:none;">
+                    <div class="card-header">
+                        <span class="material-icons">analytics</span>
+                        <span>Results</span>
+                    </div>
+                    <div class="card-content" id="results-content"></div>
+                </div>
+
+                <div class="card" id="history-card">
+                    <div class="card-header">
+                        <span class="material-icons">history</span>
+                        <span>History</span>
+                        <button id="btn-clear-history" class="btn-icon" title="Clear History">
+                            <span class="material-icons">delete_outline</span>
+                        </button>
+                    </div>
+                    <div class="card-content">
+                        <div id="history-list" class="history-list">
+                            <div class="history-empty">No runs yet</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-bar" id="status">Ready</div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="content">
+                <div class="map-grid">
+                    <div class="map-panel" data-algo="ALNS">
+                        <div class="map-title">
+                            <span>ALNS (Baseline)</span>
+                            <span class="map-meta" id="meta-alns"></span>
+                        </div>
+                        <div id="map-alns" class="map-container"></div>
+                    </div>
+                    <div class="map-panel" data-algo="Hybrid">
+                        <div class="map-title">
+                            <span>Hybrid DQN+ALNS</span>
+                            <span class="map-meta" id="meta-hybrid"></span>
+                        </div>
+                        <div id="map-hybrid" class="map-container"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

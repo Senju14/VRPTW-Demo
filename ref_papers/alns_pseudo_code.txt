@@ -1,0 +1,86 @@
+ADAPTIVE LARGE NEIGHBORHOOD SEARCH (ALNS)
+
+--- ALGORITHM PSEUDOCODE ---
+
+1:  input: a feasible solution S, Omega-, Omega+, eta_s, alpha, T_0
+2:  S* <- S, S' <- S, i <- 1, T <- T_0
+3:  Initialize w_i-, w_i+, p-, and p+
+4:  repeat
+5:      Select a destroy and a repair operator from Omega- and Omega+ using roulette wheel selection
+6:      S' <- repair(destroy(S))
+7:      if accept(S', S) then
+8:          S <- S'
+9:          if (f(S) < f(S*)) then
+10:             S* <- S
+11:         end if
+12:     else
+13:         if rand[0,1] < e^(-(f(S') - f(S))/T) then
+14:             S <- S'
+15:         end if
+16:     end if
+17:     if i = eta_s then
+18:         Update w_i-, w_i+, p-, and p+
+19:         i = 0
+20:     end if
+21:     T = alpha * T, i = i + 1
+22: until stop-criterion met
+23: return S*
+
+--- TERMS & SYMBOLS ---
+
+S      : Initial solution; current solution
+S'     : Working solution
+S* : Best-known solution so far
+f(.)   : Objective value
+w_i-   : The weight associated with destroy operator i
+w_i+   : The weight associated with repair operator i
+p-     : Probabilities of destroy operator to be selected
+p+     : Probabilities of repair operator to be selected
+eta_s  : Updating period of weights
+T_0    : Initial temperature
+T      : Current temperature
+alpha  : Cooling rate
+
+
+
+Algorithm 1: LNS heuristic
+1  Function LNS(s, q)
+2    solution s_best = s;
+3    repeat
+4      s' = s;
+5      remove q requests from s' (Destroy)
+6      reinsert removed requests into s' (Repair)
+7      if f(s') < f(s_best) then
+8        s_best = s';
+9      if accept(s', s) then
+10       s = s';
+11   until stop-criterion met
+12   return s_best;
+
+
+
+Algorithm 2: Shaw Removal
+1  Function ShawRemoval(s, q, p)
+2    request: r = a randomly selected request from s;
+3    set of requests: D = {r};
+4    while |D| < q do
+5      r = a randomly selected request from D;
+6      Array: L = all requests from s not in D;
+7      sort L such that i < j => R(r, L[i]) < R(r, L[j]);
+8      choose a random number y from [0, 1);
+9      D = D ∪ {L[y^p * |L|]};
+10   end while
+11   remove the requests in D from s;
+
+
+
+
+Algorithm 3: Worst Removal
+1  Function WorstRemoval(s, q, p)
+2    while q > 0 do
+3      Array: L = All planned requests i, sorted by descending cost(i, s);
+4      choose a random number y from [0, 1);
+5      request: r = L[y^p * |L|];
+6      remove r from solution s;
+7      q = q - 1;
+8    end while

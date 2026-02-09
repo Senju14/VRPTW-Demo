@@ -1,10 +1,18 @@
-"""VRPTW data types and structures."""
+"""
+Data types and Pydantic schemas for VRPTW.
+Combined Dataclasses for algorithms and Pydantic models for API.
+"""
 
 import math
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+from pydantic import BaseModel
 
+
+# =============================================================================
+# ALGORITHM CORE TYPES (Dataclasses)
+# =============================================================================
 
 @dataclass
 class Customer:
@@ -106,49 +114,57 @@ class Solution:
         return Solution([r[:] for r in self.routes], self.instance)
 
 
-def parse_solomon_file(filepath: str) -> dict:
-    """Parse Solomon format benchmark file."""
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
-    
-    name = lines[0].strip()
-    vehicle_line = lines[4].split()
-    num_vehicles = int(vehicle_line[0])
-    capacity = float(vehicle_line[1])
-    
-    nodes = []
-    for line in lines[9:]:
-        parts = line.split()
-        if len(parts) >= 7:
-            nodes.append({
-                'id': int(parts[0]),
-                'x': float(parts[1]),
-                'y': float(parts[2]),
-                'demand': float(parts[3]),
-                'ready_time': float(parts[4]),
-                'due_date': float(parts[5]),
-                'service_time': float(parts[6])
-            })
-    
-    depot_data = nodes[0]
-    depot = Customer(
-        id=0, x=depot_data['x'], y=depot_data['y'],
-        demand=0, ready_time=depot_data['ready_time'],
-        due_date=depot_data['due_date'], service_time=0
-    )
-    
-    customers = [
-        Customer(id=n['id'], x=n['x'], y=n['y'], demand=n['demand'],
-                 ready_time=n['ready_time'], due_date=n['due_date'],
-                 service_time=n['service_time'])
-        for n in nodes[1:]
-    ]
-    
-    return {
-        'name': name,
-        'depot': depot,
-        'customers': customers,
-        'capacity': capacity,
-        'num_vehicles': num_vehicles,
-        'raw_nodes': nodes
-    }
+# =============================================================================
+# API DATA MODELS (Pydantic)
+# =============================================================================
+
+class NodeData(BaseModel):
+    """Information for a node (depot or customer)"""
+    id: int
+    lat: float
+    lng: float
+    demand: float = 0
+    ready_time: float = 0
+    due_time: float = 0
+    service_time: float = 0
+    address: Optional[str] = None
+    arrival_time: Optional[float] = None
+    start_service: Optional[float] = None
+    end_service: Optional[float] = None
+    wait_time: Optional[float] = None
+
+
+class RouteData(BaseModel):
+    """Route containing a list of nodes"""
+    nodes: List[NodeData]
+    vehicle_id: Optional[int] = None
+    distance: float = 0
+    duration: float = 0
+    geometry: Optional[List[Tuple[float, float]]] = None
+
+
+class SolveRequest(BaseModel):
+    """Solve request for benchmark or custom problem."""
+    instance: Optional[str] = None
+    algorithms: List[str]
+    max_vehicles: Optional[int] = None
+    time_limit: float = 15.0
+    # For custom problem
+    customers: Optional[List[NodeData]] = None
+    depot: Optional[NodeData] = None
+
+
+class SolutionResult(BaseModel):
+    """Algorithm result summary"""
+    algorithm: str
+    vehicles: int
+    distance: float
+    time: float
+    routes: Optional[List[RouteData]] = None
+    depot: Optional[NodeData] = None
+    error: Optional[str] = None
+
+
+class SolveResponse(BaseModel):
+    """Response containing multiple solutions"""
+    solutions: List[SolutionResult]

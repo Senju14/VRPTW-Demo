@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRPTW Planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- Favicon using the brand icon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%231a73e8%22><path d=%22M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z%22/></svg>">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-brand">
+                <span class="material-icons brand-icon">map</span>
+                <h1>VRPTW Planner</h1>
+            </div>
+            
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="benchmark">
+                    <span class="material-icons">science</span>
+                    Benchmark
+                </button>
+                <button class="nav-tab" data-tab="production">
+                    <span class="material-icons">local_shipping</span>
+                    Custom Problem
+                </button>
+                <button class="nav-tab" data-tab="dashboard">
+                    <span class="material-icons">dashboard</span>
+                    Dashboard
+                </button>
+                <button class="nav-tab" data-tab="history">
+                    <span class="material-icons">history</span>
+                    History
+                </button>
+            </nav>
+        </header>
+
+        <div class="main-layout">
+            <!-- ===== TAB: BENCHMARK ===== -->
+            <div id="tab-benchmark" class="tab-content active">
+                <aside class="sidebar">
+                    <!-- Solomon Dataset -->
+                    <div class="card card-blue">
+                        <div class="card-header">
+                            <span class="material-icons">folder_open</span>
+                            <span>Solomon Dataset</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">Instance</label>
+                                <div class="input-row">
+                                    <select id="instance-select" class="form-select">
+                                        <option value="">Loading...</option>
+                                    </select>
+                                    <button id="btn-load" class="btn btn-primary btn-icon" title="Load Instance">
+                                        <span class="material-icons">map</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Instance Info -->
+                    <div class="card card-green" id="info-card" style="display:none;">
+                        <div class="card-header">
+                            <span class="material-icons">info</span>
+                            <span>Instance Info</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-grid">
+                                <span>Name</span><span id="info-name">-</span>
+                                <span>Customers</span><span id="info-customers">-</span>
+                                <span>Capacity</span><span id="info-capacity">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="material-icons">tune</span>
+                            <span>Algorithm Settings</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label class="form-label">Max Vehicles</label>
+                                    <input type="number" id="max-vehicles" class="form-input" value="25" min="1" max="50">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label class="form-label">Time Limit (s)</label>
+                                    <input type="number" id="time-limit" class="form-input" value="15" min="1" max="300">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions & Results -->
+                    <div class="action-group" id="benchmark-actions">
+                        <!-- Results Card  -->
+                        <div class="card card-purple" id="results-card" style="display:none; margin-top: 4px;">
+                            <div class="card-header">
+                                <span class="material-icons">analytics</span>
+                                <span>Result Comparison</span>
+                            </div>
+                            <div class="card-body" id="results-content" style="padding: 0;"></div>
+                        </div>
+
+                        <button id="btn-solve" class="btn btn-primary btn-block">
+                            <span class="material-icons">play_arrow</span>
+                            Run Comparison
+                        </button>
+
+                        <button id="btn-clear" class="btn btn-secondary btn-block" style="margin-top: 8px;">
+                            <span class="material-icons">refresh</span>
+                            Clear Workspace
+                        </button>
+                    </div>
+                </aside>
+
+                <main class="content">
+                    <div class="map-grid">
+                        <div class="map-panel" id="panel-alns">
+                            <div class="map-header">
+                                <span class="map-title">ALNS (Baseline)</span>
+                                <span class="map-meta" id="meta-alns"></span>
+                            </div>
+                            <div id="map-alns" class="map-view"></div>
+                        </div>
+                        <div class="map-panel" id="panel-hybrid">
+                            <div class="map-header">
+                                <span class="map-title">Hybrid Pointer DQN + ALNS (Proposed)</span>
+                                <span class="map-meta" id="meta-hybrid"></span>
+                            </div>
+                            <div id="map-hybrid" class="map-view"></div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- ===== TAB: CUSTOM PROBLEM ===== -->
+            <div id="tab-production" class="tab-content">
+                <aside class="sidebar">
+                    <!-- Smart Paste -->
+                    <div class="card card-blue">
+                        <div class="card-header">
+                            <span class="material-icons">content_paste</span>
+                            <span>Smart Paste (Vietnam)</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="paste-hint">
+                                First line = Hub (Depot). 
+                            </div>
+                            <textarea id="paste-area" class="paste-area">Dinh Doc Lap, District 1, HCMC | 0 | 06:00-22:00
+Landmark 81, Binh Thanh, HCMC | 20 | 08:00-12:00
+Bitexco Tower, District 1, HCMC | 15 | 09:00-17:00
+Aeon Mall Tan Phu, HCMC | 30 | 10:00-16:00
+Chua Vinh Nghiem, District 3, HCMC | 10 | 08:00-12:00
+Gigamall Thu Duc, HCMC | 25 | 14:00-18:00</textarea>
+                            <button id="btn-parse" class="btn btn-secondary btn-block">
+                                <span class="material-icons">auto_fix_high</span>
+                                Parse Data
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Customer List -->
+                    <div class="card card-green" id="cust-card" style="display:none;">
+                        <div class="card-header">
+                            <span class="material-icons">people</span>
+                            <span>Points (<span id="cust-count">0</span>)</span>
+                        </div>
+                        <div class="card-body card-scroll">
+                            <div id="cust-list" class="cust-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Hub & Vehicle Settings -->
+                    <div class="card card-orange">
+                        <div class="card-header">
+                            <span class="material-icons">local_shipping</span>
+                            <span>Vehicle Config</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label class="form-label">Capacity</label>
+                                    <input type="number" id="prod-capacity" class="form-input" value="100">
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label class="form-label">Vehicles</label>
+                                    <input type="number" id="prod-vehicles" class="form-input" value="10">
+                                </div>
+                            </div>
+                            <div id="prod-summary" class="status-badge" style="display:none; margin-top:12px; font-weight:500;"></div>
+                            <button id="btn-plan" class="btn btn-primary btn-full" style="margin-top:16px;">
+                                <span class="material-icons">route</span> Plan Optimized Routes
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="action-group">
+                        <button id="btn-add-mode" class="btn btn-secondary btn-block">
+                            <span class="material-icons">add_location</span>
+                            Manual Entry (Map Click)
+                        </button>
+                    </div>
+                </aside>
+
+                <main class="content">
+                    <div class="map-panel full">
+                        <div class="map-header">
+                            <span class="map-title">Custom Problem Sandbox</span>
+                            <span class="map-meta" id="prod-meta">Add customers locally or via paste</span>
+                        </div>
+                        <div id="map-prod" class="map-view"></div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- ===== TAB: DASHBOARD ===== -->
+            <div id="tab-dashboard" class="tab-content">
+                <div class="dashboard-page">
+                    <div class="dashboard-header">
+                        <h2>Analytics Dashboard</h2>
+                        <div id="dash-instance-info" class="dash-meta">No active solution</div>
+                    </div>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon blue"><span class="material-icons">straighten</span></div>
+                            <div class="metric-data">
+                                <div class="metric-label">Total Distance</div>
+                                <div id="dash-distance" class="metric-value">-</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon green"><span class="material-icons">local_shipping</span></div>
+                            <div class="metric-data">
+                                <div class="metric-label">Vehicles Used</div>
+                                <div id="dash-vehicles" class="metric-value">-</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-icon orange"><span class="material-icons">timer</span></div>
+                            <div class="metric-data">
+                                <div class="metric-label">Runtime</div>
+                                <div id="dash-runtime" class="metric-value">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Timeline Section -->
+                    <div class="dashboard-section">
+                        <div class="section-header">
+                            <h3>Vehicle Timeline</h3>
+                            <div class="timeline-legend">
+                                <div class="legend-item"><span class="dot blue"></span> <span>Wait</span></div>
+                                <div class="legend-item"><span class="dot yellow"></span> <span>Travel</span></div>
+                                <div class="legend-item"><span class="dot green"></span> <span>Service</span></div>
+                            </div>
+                        </div>
+                        <div class="timeline-axis-container">
+                            <div class="timeline-label-spacer"></div>
+                            <div id="timeline-axis" class="timeline-axis"></div>
+                        </div>
+                        <div class="timeline-container" id="gantt-chart">
+                            <div class="empty-state">Solve a problem to view the timeline</div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-charts">
+                        <div class="chart-panel">
+                            <h3>Route Length Breakdown</h3>
+                            <div id="vehicle-list" class="vehicle-metrics-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                        <div class="chart-panel">
+                            <h3>Optimization Progress</h3>
+                            <div id="chart-comparison" class="chart-placeholder">History visualization</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: HISTORY ===== -->
+            <div id="tab-history" class="tab-content">
+                <div class="history-page">
+                    <div class="history-header">
+                        <h2>Execution History</h2>
+                        <button id="btn-clear-history" class="btn btn-secondary">
+                            <span class="material-icons">delete_sweep</span>
+                            Clear All
+                        </button>
+                    </div>
+                    <div class="history-table-wrap">
+                        <table class="data-table" id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Problem</th>
+                                    <th>Winner</th>
+                                    <th>Vehicle</th>
+                                    <th>Distance</th>
+                                    <th>Runtime</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-tbody"></tbody>
+                        </table>
+                        <div id="history-empty" class="empty-state">No execution logs found.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Modal Popup -->
+        <div id="custom-modal" class="modal-overlay" style="display:none;">
+            <div class="modal">
+                <div class="modal-header">
+                    <span id="modal-title">Notification</span>
+                    <button class="modal-close" id="modal-close-icon">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="modal-message"></p>
+                </div>
+                <div class="modal-footer">
+                    <button id="modal-btn-cancel" class="btn btn-secondary" style="display:none;">Cancel</button>
+                    <button id="modal-btn-ok" class="btn btn-primary">OK</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

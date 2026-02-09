@@ -4,7 +4,7 @@ Hybrid solver for Vehicle Routing Problem with Time Windows combining DQN warm-s
 
 ## Features
 
-- **Solomon Benchmark**: Test against standard RC datasets
+- **Solomon Benchmark**: Test against standard RC1&2 Solomon datasets
 - **Real-world Operations**: Interactive map planning for Vietnam logistics
 - **History**: Track and compare past optimization runs
 
@@ -13,7 +13,13 @@ Hybrid solver for Vehicle Routing Problem with Time Windows combining DQN warm-s
 ```bash
 python -m venv venv
 .\venv\Scripts\activate
+
+pip install uv
+uv init .
+
 uv pip install -r requirements.txt
+uv lock
+
 python main.py
 ```
 
@@ -30,4 +36,4 @@ src/
 
 ## Reference
 
-He et al. (2021) arXiv:2103.05847
+MIT 
